@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class UploadFilePage extends StatefulWidget {
   @override
@@ -9,6 +12,8 @@ class UploadFilePage extends StatefulWidget {
 
 class _UploadFilePageState extends State<UploadFilePage> {
   File? _selectedFile;
+  final String cloudinaryUrl = "https://api.cloudinary.com/v1_1/dxmczui47/image/upload";
+  final String uploadPreset = "absensi";
 
   void _pickFile(BuildContext context, FileType fileType) async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(type: fileType);
@@ -51,13 +56,47 @@ class _UploadFilePageState extends State<UploadFilePage> {
     );
   }
 
-  void _submitFile() {
+  Future<String?> _uploadToCloudinary(File file) async {
+    try {
+      var request = http.MultipartRequest('POST', Uri.parse(cloudinaryUrl));
+      request.fields['upload_preset'] = uploadPreset;
+      request.files.add(await http.MultipartFile.fromPath('file', file.path));
+
+      var response = await request.send();
+      var responseData = await response.stream.bytesToString();
+      var jsonData = json.decode(responseData);
+
+      return jsonData['secure_url'];
+    } catch (e) {
+      print('Error uploading to Cloudinary: $e');
+      return null;
+    }
+  }
+
+  void _submitFile() async {
     if (_selectedFile != null) {
+      String? imageUrl = await _uploadToCloudinary(_selectedFile!);
+      if (imageUrl != null) {
+        await FirebaseFirestore.instance.collection('photos').add({
+          'imageUrl': imageUrl,
+          'status': 'pending',
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('File berhasil diunggah dan disimpan ke database!')),
+        );
+        Navigator.pop(context);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal mengunggah file!')),
+        );
+      }
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('File berhasil diunggah: ${_selectedFile!.path}')),
+        SnackBar(content: Text('Pilih file terlebih dahulu!')),
       );
     }
-    Navigator.pop(context); // Kembali ke AbsensiPage setelah submit
   }
 
   @override

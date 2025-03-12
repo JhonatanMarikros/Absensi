@@ -224,7 +224,10 @@ class _AdminHomePageState extends State<AdminHomePage> {
                     String imageUrl =
                         doc['imageUrl']; // Pastikan field Firestore benar
                     String docId = doc.id;
-                    String status = doc['status'] ?? "Pending";
+                    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+                    String status = data.containsKey('status') ? data['status'] : "Pending";
+
+
 
                     return Card(
                       margin: EdgeInsets.all(10),
