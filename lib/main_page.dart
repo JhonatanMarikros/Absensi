@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'home_main.dart';
@@ -7,7 +8,8 @@ import 'absensi_page.dart';
 import 'registerLogin.dart';
 
 class MainPage extends StatefulWidget {
-  MainPage({Key? key}) : super(key: key);
+  final String uid; // Ambil UID saat login
+  MainPage({Key? key, required this.uid}) : super(key: key);
 
   @override
   _MainPageState createState() => _MainPageState();
@@ -15,6 +17,26 @@ class MainPage extends StatefulWidget {
 
 class _MainPageState extends State<MainPage> {
   int _selectedIndex = 0;
+  String username = "";
+  String profileUrl = "";
+
+  @override
+  void initState() {
+    super.initState();
+    _getUserData();
+  }
+
+  void _getUserData() async {
+    DocumentSnapshot userDoc =
+        await FirebaseFirestore.instance.collection('users').doc(widget.uid).get();
+    
+    if (userDoc.exists) {
+      setState(() {
+        username = userDoc['username'];
+        profileUrl = userDoc['profile'];
+      });
+    }
+  }
 
   void _onItemTapped(int index) {
     setState(() {
@@ -41,36 +63,28 @@ class _MainPageState extends State<MainPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Main Page - User'),
+        title: Text('Main Page - $username'),
         actions: [
+          if (profileUrl.isNotEmpty)
+            CircleAvatar(
+              backgroundImage: NetworkImage(profileUrl),
+            ),
           IconButton(
             icon: Icon(Icons.logout),
             onPressed: () => _logout(context),
           ),
         ],
       ),
-      body: _pages[_selectedIndex], // Menampilkan halaman yang sesuai
+      body: _pages[_selectedIndex], 
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
         items: [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: "Home",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: "ME",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.menu_book), // Ikon Panduan
-            label: "Panduan",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.check_circle), // Ikon Absensi
-            label: "Absensi",
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: "ME"),
+          BottomNavigationBarItem(icon: Icon(Icons.menu_book), label: "Panduan"),
+          BottomNavigationBarItem(icon: Icon(Icons.check_circle), label: "Absensi"),
         ],
       ),
     );

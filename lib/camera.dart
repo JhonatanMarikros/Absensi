@@ -1,5 +1,6 @@
-import 'package:camera/camera.dart'; 
+import 'package:camera/camera.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -18,9 +19,11 @@ class _CameraPageState extends State<CameraPage> {
   late List<CameraDescription> cameras;
   int selectedCameraIndex = 0;
   File? _capturedImage;
-
-  final String cloudinaryUrl = "https://api.cloudinary.com/v1_1/dxmczui47/image/upload";
+  final String cloudinaryUrl =
+      "https://api.cloudinary.com/v1_1/dxmczui47/image/upload";
   final String uploadPreset = "absensi";
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   @override
   void initState() {
@@ -32,7 +35,7 @@ class _CameraPageState extends State<CameraPage> {
     try {
       cameras = await availableCameras();
       _controller = CameraController(
-        cameras[selectedCameraIndex], 
+        cameras[selectedCameraIndex],
         ResolutionPreset.medium,
       );
       _initializeControllerFuture = _controller.initialize();
@@ -49,7 +52,7 @@ class _CameraPageState extends State<CameraPage> {
 
     await _controller.dispose();
     _controller = CameraController(
-      cameras[selectedCameraIndex], 
+      cameras[selectedCameraIndex],
       ResolutionPreset.medium,
     );
 
@@ -72,13 +75,51 @@ class _CameraPageState extends State<CameraPage> {
   Future<void> _submitPhoto() async {
     if (_capturedImage == null) return;
 
+    User? user = _auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('User not logged in!')),
+      );
+      return;
+    }
+
+    String uid = user.uid;
     String? imageUrl = await _uploadToCloudinary(_capturedImage!);
+
     if (imageUrl != null) {
-      await FirebaseFirestore.instance.collection('photos').add({
+      DocumentReference docRef = _firestore.collection('photos').doc(uid);
+      DocumentSnapshot snapshot = await docRef.get();
+
+      Map<String, dynamic> newImage = {
         'imageUrl': imageUrl,
         'status': 'pending',
-        'timestamp': FieldValue.serverTimestamp(),
-      });
+        'timestamp': Timestamp.now(), // ✅ Ganti FieldValue.serverTimestamp()
+      };
+
+      if (snapshot.exists) {
+        // Jika dokumen sudah ada, update array
+        await docRef.update({
+          'imageUrls': FieldValue.arrayUnion([
+            {
+              'imageUrl': imageUrl,
+              'status': 'pending',
+              'timestamp': Timestamp.now(), // Gunakan Timestamp.now()
+            }
+          ]),
+        });
+      } else {
+        // Jika dokumen belum ada, buat baru
+        await docRef.set({
+          'imageUrls': [
+            {
+              'imageUrl': imageUrl,
+              'status': 'pending',
+              'timestamp': Timestamp.now(), // Gunakan Timestamp.now()
+            }
+          ]
+        });
+      }
+
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Photo uploaded successfully!')),
@@ -88,7 +129,6 @@ class _CameraPageState extends State<CameraPage> {
         _capturedImage = null;
       });
 
-      // Kembali ke halaman sebelumnya (AbsensiPage)
       Navigator.pop(context);
     }
   }
@@ -97,7 +137,8 @@ class _CameraPageState extends State<CameraPage> {
     try {
       var request = http.MultipartRequest('POST', Uri.parse(cloudinaryUrl));
       request.fields['upload_preset'] = uploadPreset;
-      request.files.add(await http.MultipartFile.fromPath('file', imageFile.path));
+      request.files
+          .add(await http.MultipartFile.fromPath('file', imageFile.path));
 
       var response = await request.send();
       var responseData = await response.stream.bytesToString();

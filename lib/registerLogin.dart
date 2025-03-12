@@ -1,4 +1,3 @@
-// registerLogin.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +12,7 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   bool isLogin = true;
@@ -33,22 +33,32 @@ class _AuthScreenState extends State<AuthScreen> {
           password: _passwordController.text,
         );
 
-        // Tambahkan user ke Firestore dengan role "user"
-        await _firestore.collection('users').doc(userCredential.user!.email).set({
+        // Simpan data pengguna di Firestore dengan UID sebagai primary key
+        await _firestore.collection('users').doc(userCredential.user!.uid).set({
+          'uid': userCredential.user!.uid, // Menyimpan UID sebagai field
+          'email': _emailController.text,
+          'username': _usernameController.text,
+          'profile': "", // Kosong dulu, bisa diupload nanti
           'role': 'user',
         });
       }
 
       // Ambil role user dari Firestore
-      DocumentSnapshot userDoc =
-          await _firestore.collection('users').doc(userCredential.user!.email).get();
+      DocumentSnapshot userDoc = await _firestore
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .get();
       String role = userDoc.exists ? userDoc['role'] : 'user';
 
       // Arahkan berdasarkan role
       if (role == 'admin') {
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => AdminHomePage()));
+        Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (context) => AdminHomePage()));
       } else {
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => MainPage()));
+        Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+                builder: (context) => MainPage(uid: userCredential.user!.uid)));
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -66,6 +76,11 @@ class _AuthScreenState extends State<AuthScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            if (!isLogin)
+              TextField(
+                controller: _usernameController,
+                decoration: InputDecoration(labelText: 'Username'),
+              ),
             TextField(
               controller: _emailController,
               decoration: InputDecoration(labelText: 'Email'),
@@ -86,7 +101,9 @@ class _AuthScreenState extends State<AuthScreen> {
                   isLogin = !isLogin;
                 });
               },
-              child: Text(isLogin ? 'Create an account' : 'Already have an account? Login'),
+              child: Text(isLogin
+                  ? 'Create an account'
+                  : 'Already have an account? Login'),
             ),
           ],
         ),
