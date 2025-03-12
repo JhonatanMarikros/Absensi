@@ -16,6 +16,7 @@ class _CameraPageState extends State<CameraPage> {
   late CameraController _controller;
   late Future<void> _initializeControllerFuture;
   late List<CameraDescription> cameras;
+  int selectedCameraIndex = 0; // Indeks kamera yang sedang digunakan
 
   final String cloudinaryUrl = "https://api.cloudinary.com/v1_1/dxmczui47/image/upload";
   final String uploadPreset = "absensi"; // Buat preset di Cloudinary
@@ -30,7 +31,7 @@ class _CameraPageState extends State<CameraPage> {
     try {
       cameras = await availableCameras();
       _controller = CameraController(
-        cameras[0],
+        cameras[selectedCameraIndex], 
         ResolutionPreset.medium,
       );
       _initializeControllerFuture = _controller.initialize();
@@ -38,6 +39,21 @@ class _CameraPageState extends State<CameraPage> {
     } catch (e) {
       print('Error initializing camera: $e');
     }
+  }
+
+  Future<void> _switchCamera() async {
+    if (cameras.isEmpty) return;
+
+    selectedCameraIndex = (selectedCameraIndex + 1) % cameras.length;
+
+    await _controller.dispose();
+    _controller = CameraController(
+      cameras[selectedCameraIndex], 
+      ResolutionPreset.medium,
+    );
+
+    _initializeControllerFuture = _controller.initialize();
+    setState(() {});
   }
 
   Future<void> _captureAndUploadPhoto() async {
@@ -94,14 +110,23 @@ class _CameraPageState extends State<CameraPage> {
         future: _initializeControllerFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.done) {
-            return Column(
+            return Stack(
               children: [
-                Expanded(child: CameraPreview(_controller)),
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: ElevatedButton(
+                CameraPreview(_controller),
+                Positioned(
+                  bottom: 20,
+                  left: 20,
+                  child: FloatingActionButton(
+                    onPressed: _switchCamera,
+                    child: const Icon(Icons.switch_camera),
+                  ),
+                ),
+                Positioned(
+                  bottom: 20,
+                  right: 20,
+                  child: FloatingActionButton(
                     onPressed: _captureAndUploadPhoto,
-                    child: const Text('Take Photo'),
+                    child: const Icon(Icons.camera),
                   ),
                 ),
               ],
