@@ -1,15 +1,26 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'camera.dart';
+import 'home_main.dart';
+import 'me.dart';
+import 'panduan.dart';
+import 'absensi_page.dart';
 import 'registerLogin.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart'; // Import dotenv
 
-class MainPage extends StatelessWidget {
+class MainPage extends StatefulWidget {
   MainPage({Key? key}) : super(key: key);
+
+  @override
+  _MainPageState createState() => _MainPageState();
+}
+
+class _MainPageState extends State<MainPage> {
+  int _selectedIndex = 0;
+
+  void _onItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
 
   void _logout(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
@@ -19,61 +30,12 @@ class MainPage extends StatelessWidget {
     );
   }
 
-  Future<void> _deletePhoto(
-      BuildContext context, String docId, String imageUrl) async {
-    try {
-      await FirebaseFirestore.instance.collection('photos').doc(docId).delete();
-      await _deleteFromCloudinary(imageUrl);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Foto berhasil dihapus!")),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: ${e.toString()}")),
-      );
-    }
-  }
-
-  Future<void> _deleteFromCloudinary(String imageUrl) async {
-    try {
-      String cloudName = dotenv.env['CLOUDINARY_CLOUD_NAME']!;
-      String apiKey = dotenv.env['CLOUDINARY_API_KEY']!;
-      String apiSecret = dotenv.env['CLOUDINARY_API_SECRET']!;
-
-      Uri uri = Uri.parse(imageUrl);
-      String fileName = uri.pathSegments.last.split('.').first;
-      String publicId =
-          "absensi/$fileName"; // Sesuaikan dengan folder Cloudinary
-
-      String timestamp =
-          (DateTime.now().millisecondsSinceEpoch ~/ 1000).toString();
-      String stringToSign =
-          'public_id=$publicId&timestamp=$timestamp$apiSecret';
-      String signature = sha1.convert(utf8.encode(stringToSign)).toString();
-
-      String apiUrl =
-          'https://api.cloudinary.com/v1_1/$cloudName/image/destroy';
-
-      var response = await http.post(
-        Uri.parse(apiUrl),
-        body: {
-          'public_id': publicId,
-          'api_key': apiKey,
-          'timestamp': timestamp,
-          'signature': signature,
-          'invalidate': 'true',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        print("Foto berhasil dihapus dari Cloudinary");
-      } else {
-        print("Gagal menghapus foto dari Cloudinary: ${response.body}");
-      }
-    } catch (e) {
-      print("Error saat menghapus foto dari Cloudinary: $e");
-    }
-  }
+  final List<Widget> _pages = [
+    HomeMain(),
+    MePage(),
+    PanduanPage(),
+    AbsensiPage(),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -87,51 +49,27 @@ class MainPage extends StatelessWidget {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          ElevatedButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => CameraPage()),
-              );
-            },
-            child: Text('Take Photo'),
+      body: _pages[_selectedIndex], // Menampilkan halaman yang sesuai
+      bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
+        currentIndex: _selectedIndex,
+        onTap: _onItemTapped,
+        items: [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: "Home",
           ),
-          Expanded(
-            child: StreamBuilder(
-              stream:
-                  FirebaseFirestore.instance.collection('photos').snapshots(),
-              builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
-                if (!snapshot.hasData)
-                  return Center(child: CircularProgressIndicator());
-
-                return ListView(
-                  children: snapshot.data!.docs.map((doc) {
-                    String imageUrl = doc['imageUrl'];
-                    String docId = doc.id;
-
-                    return Card(
-                      margin: EdgeInsets.all(10),
-                      child: Column(
-                        children: [
-                          Image.network(imageUrl),
-                          ListTile(
-                            title: Text("Status: ${doc['status']}"),
-                            subtitle: Text(
-                                doc['timestamp']?.toDate().toString() ?? ''),
-                            trailing: IconButton(
-                              icon: Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => _deletePhoto(context, docId, imageUrl),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                );
-              },
-            ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: "ME",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.menu_book), // Ikon Panduan
+            label: "Panduan",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.check_circle), // Ikon Absensi
+            label: "Absensi",
           ),
         ],
       ),
