@@ -1,4 +1,4 @@
-import 'package:camera/camera.dart';
+import 'package:camera/camera.dart'; 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -16,10 +16,11 @@ class _CameraPageState extends State<CameraPage> {
   late CameraController _controller;
   late Future<void> _initializeControllerFuture;
   late List<CameraDescription> cameras;
-  int selectedCameraIndex = 0; // Indeks kamera yang sedang digunakan
+  int selectedCameraIndex = 0;
+  File? _capturedImage;
 
   final String cloudinaryUrl = "https://api.cloudinary.com/v1_1/dxmczui47/image/upload";
-  final String uploadPreset = "absensi"; // Buat preset di Cloudinary
+  final String uploadPreset = "absensi";
 
   @override
   void initState() {
@@ -56,26 +57,39 @@ class _CameraPageState extends State<CameraPage> {
     setState(() {});
   }
 
-  Future<void> _captureAndUploadPhoto() async {
+  Future<void> _capturePhoto() async {
     try {
       await _initializeControllerFuture;
       final image = await _controller.takePicture();
-      File imageFile = File(image.path);
-
-      String? imageUrl = await _uploadToCloudinary(imageFile);
-      if (imageUrl != null) {
-        await FirebaseFirestore.instance.collection('photos').add({
-          'imageUrl': imageUrl,
-          'status': 'pending',
-          'timestamp': FieldValue.serverTimestamp(),
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Photo uploaded successfully!')),
-        );
-      }
+      setState(() {
+        _capturedImage = File(image.path);
+      });
     } catch (e) {
       print('Error: $e');
+    }
+  }
+
+  Future<void> _submitPhoto() async {
+    if (_capturedImage == null) return;
+
+    String? imageUrl = await _uploadToCloudinary(_capturedImage!);
+    if (imageUrl != null) {
+      await FirebaseFirestore.instance.collection('photos').add({
+        'imageUrl': imageUrl,
+        'status': 'pending',
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Photo uploaded successfully!')),
+      );
+
+      setState(() {
+        _capturedImage = null;
+      });
+
+      // Kembali ke halaman sebelumnya (AbsensiPage)
+      Navigator.pop(context);
     }
   }
 
@@ -106,35 +120,41 @@ class _CameraPageState extends State<CameraPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Camera Example')),
-      body: FutureBuilder<void>(
-        future: _initializeControllerFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.done) {
-            return Stack(
-              children: [
-                CameraPreview(_controller),
-                Positioned(
-                  bottom: 20,
-                  left: 20,
-                  child: FloatingActionButton(
-                    onPressed: _switchCamera,
-                    child: const Icon(Icons.switch_camera),
-                  ),
+      body: Column(
+        children: [
+          Expanded(
+            child: _capturedImage == null
+                ? FutureBuilder<void>(
+                    future: _initializeControllerFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.done) {
+                        return CameraPreview(_controller);
+                      } else {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                    },
+                  )
+                : Image.file(_capturedImage!),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              FloatingActionButton(
+                onPressed: _switchCamera,
+                child: const Icon(Icons.switch_camera),
+              ),
+              FloatingActionButton(
+                onPressed: _capturePhoto,
+                child: const Icon(Icons.camera),
+              ),
+              if (_capturedImage != null)
+                FloatingActionButton(
+                  onPressed: _submitPhoto,
+                  child: const Icon(Icons.upload),
                 ),
-                Positioned(
-                  bottom: 20,
-                  right: 20,
-                  child: FloatingActionButton(
-                    onPressed: _captureAndUploadPhoto,
-                    child: const Icon(Icons.camera),
-                  ),
-                ),
-              ],
-            );
-          } else {
-            return const Center(child: CircularProgressIndicator());
-          }
-        },
+            ],
+          ),
+        ],
       ),
     );
   }
