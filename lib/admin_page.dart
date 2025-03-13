@@ -67,6 +67,19 @@ class _AdminHomePageState extends State<AdminHomePage> {
     }
   }
 
+  void _deleteAdmin(String email) async {
+    try {
+      await _firestore.collection('users').doc(email).delete();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Admin $email berhasil dihapus!")),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: ${e.toString()}")),
+      );
+    }
+  }
+
   Future<void> _updateStatus(
       String uid, ImageData image, String newStatus) async {
     try {
@@ -142,55 +155,107 @@ class _AdminHomePageState extends State<AdminHomePage> {
           ),
         ],
       ),
-      body: StreamBuilder(
+      
+      body: Column(
+  children: [
+    // Form Tambah Admin
+    Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Column(
+        children: [
+          TextField(
+            controller: _emailController,
+            decoration: InputDecoration(labelText: 'Email Admin'),
+          ),
+          TextField(
+            controller: _passwordController,
+            decoration: InputDecoration(labelText: 'Password'),
+            obscureText: true,
+          ),
+          SizedBox(height: 10),
+          ElevatedButton(
+            onPressed: _addAdmin,
+            child: Text('Tambah Admin'),
+          ),
+        ],
+      ),
+    ),
+
+    // Daftar Admin
+    Expanded(
+  child: StreamBuilder(
+    stream: _firestore.collection('users').where('role', isEqualTo: 'admin').snapshots(),
+    builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
+      if (!snapshot.hasData) {
+        return Center(child: CircularProgressIndicator());
+      }
+
+      return ListView(
+        children: snapshot.data!.docs.map((doc) {
+          Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+
+          // Cek apakah 'email' ada dalam dokumen
+          if (!data.containsKey('email')) {
+            return SizedBox(); // Jika tidak ada, jangan tampilkan apa pun
+          }
+
+          String email = data['email'];
+          return ListTile(
+            title: Text(email),
+            trailing: IconButton(
+              icon: Icon(Icons.delete, color: Colors.red),
+              onPressed: () => _deleteAdmin(email),
+            ),
+          );
+        }).toList(),
+      );
+    },
+  ),
+),
+
+
+    // Daftar Foto
+    Expanded(
+      child: StreamBuilder(
         stream: _firestore.collection('photos').snapshots(),
         builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
           if (!snapshot.hasData) {
             return Center(child: CircularProgressIndicator());
           }
+
           return ListView(
             children: snapshot.data!.docs.map((doc) {
               String uid = doc.id;
               Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-              List<ImageData> imageUrls =
-                  List<ImageData>.from(data['imageUrls'] ?? []);
+              List<ImageData> imageUrls = List<ImageData>.from(data['imageUrls'] ?? []);
+
               return imageUrls.isEmpty
                   ? SizedBox() // Tidak menampilkan Card jika tidak ada gambar
                   : Card(
                       margin: EdgeInsets.all(10),
                       child: Column(
                         children: [
-                          Text('User ID: $uid',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text('User ID: $uid', style: TextStyle(fontWeight: FontWeight.bold)),
                           ...imageUrls.map((image) => Column(
                                 children: [
                                   Image.network(image['imageUrl']),
                                   Text('Status: ${image['status']}'),
                                   Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceEvenly,
+                                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                     children: [
                                       ElevatedButton(
-                                        onPressed: () => _updateStatus(
-                                            uid, image, "Approved"),
+                                        onPressed: () => _updateStatus(uid, image, "Approved"),
                                         child: Text("Approve"),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.green,
-                                        ),
+                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
                                       ),
                                       ElevatedButton(
-                                        onPressed: () => _updateStatus(
-                                            uid, image, "Rejected"),
+                                        onPressed: () => _updateStatus(uid, image, "Rejected"),
                                         child: Text("Reject"),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.red,
-                                        ),
+                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                                       ),
                                       IconButton(
-                                        icon: Icon(Icons.delete,
-                                            color: Colors.red),
-                                        onPressed: () =>
-                                            _deletePhoto(uid, image),
+                                        icon: Icon(Icons.delete, color: Colors.red),
+                                        onPressed: () => _deletePhoto(uid, image),
                                       ),
                                     ],
                                   ),
@@ -203,6 +268,10 @@ class _AdminHomePageState extends State<AdminHomePage> {
           );
         },
       ),
+    ),
+  ],
+),
+
     );
   }
 }

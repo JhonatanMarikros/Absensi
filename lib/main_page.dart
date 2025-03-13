@@ -32,8 +32,8 @@ class _MainPageState extends State<MainPage> {
     
     if (userDoc.exists) {
       setState(() {
-        username = userDoc['username'];
-        profileUrl = userDoc['profile'];
+        username = userDoc['username'];//buat ada nama tiap users di navbar atas
+        profileUrl = userDoc['profile']; //buat ada profile di navbar atas
       });
     }
   }
