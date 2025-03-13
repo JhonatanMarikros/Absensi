@@ -14,6 +14,7 @@ class _MePageState extends State<MePage> {
   String email = "";
   String profileImage = "";
   bool isEditing = false;
+  String uid = "";
 
   @override
   void initState() {
@@ -21,20 +22,25 @@ class _MePageState extends State<MePage> {
     _loadUserData();
   }
 
-  void _loadUserData() async {
-    User? user = _auth.currentUser;
-    if (user != null) {
-      DocumentSnapshot userDoc =
-          await _firestore.collection('users').doc(user.uid).get();
-      if (userDoc.exists) {
-        setState(() {
-          _usernameController.text = userDoc['username'];
-          email = userDoc['email'];
-          profileImage = userDoc['profile']; // Kosong jika belum di-upload
-        });
-      }
+void _loadUserData() async {
+  User? user = _auth.currentUser;
+  if (user != null) {
+    print("User UID: ${user.uid}"); // Debugging
+    DocumentSnapshot userDoc = await _firestore.collection('users').doc(user.uid).get();
+    
+    if (userDoc.exists) {
+      setState(() {
+        uid = user.uid;
+        _usernameController.text = userDoc['username'];
+        email = userDoc['email'];
+        profileImage = userDoc['profile'] ?? "";
+      });
     }
+  } else {
+    print("User belum login.");
   }
+}
+
 
   void _updateUsername() async {
     User? user = _auth.currentUser;
@@ -88,6 +94,48 @@ class _MePageState extends State<MePage> {
                     },
                     child: Text("Edit Username"),
                   ),
+            SizedBox(height: 20),
+
+            /// Menampilkan foto berdasarkan UID pengguna
+            Expanded(
+  child: uid.isNotEmpty
+      ? StreamBuilder<DocumentSnapshot>(
+          stream: _firestore.collection('photos').doc(uid).snapshots(),
+          builder: (context, AsyncSnapshot<DocumentSnapshot> snapshot) {
+            if (!snapshot.hasData || !snapshot.data!.exists) {
+              return Center(child: Text("Tidak ada foto yang tersedia"));
+            }
+
+            Map<String, dynamic>? data = snapshot.data!.data() as Map<String, dynamic>?;
+
+            if (data == null || !data.containsKey('imageUrls')) {
+              return Center(child: Text("Tidak ada foto yang tersedia"));
+            }
+
+            List<Map<String, dynamic>> imageUrls = List<Map<String, dynamic>>.from(data['imageUrls']);
+
+            return ListView(
+              children: imageUrls.map((image) {
+                return Card(
+                  margin: EdgeInsets.all(10),
+                  child: Column(
+                    children: [
+                      Image.network(image['imageUrl']),
+                      SizedBox(height: 5),
+                      Text(
+                        'Status: ${image['status']}',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        )
+      : Center(child: CircularProgressIndicator()), // Tambahkan indikator loading
+),
+
           ],
         ),
       ),
