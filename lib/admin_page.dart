@@ -19,6 +19,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  
+  String? selectedUserId;
 
   @override
   void initState() {
@@ -46,8 +48,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
     }
 
     try {
-      UserCredential userCredential = await _auth
-          .createUserWithEmailAndPassword(email: email, password: password);
+      UserCredential userCredential = await _auth.createUserWithEmailAndPassword(email: email, password: password);
       await _firestore.collection('users').doc(userCredential.user!.uid).set({
         'uid': userCredential.user!.uid,
         'email': email,
@@ -67,64 +68,32 @@ class _AdminHomePageState extends State<AdminHomePage> {
     }
   }
 
-  void _deleteAdmin(String email) async {
-    try {
-      await _firestore.collection('users').doc(email).delete();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Admin $email berhasil dihapus!")),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: ${e.toString()}")),
-      );
-    }
-  }
-
-  Future<void> _updateStatus(
-      String uid, ImageData image, String newStatus) async {
-    try {
-      await _firestore.collection('photos').doc(uid).update({
-        'imageUrls': FieldValue.arrayRemove([image])
-      });
-      image['status'] = newStatus;
-      await _firestore.collection('photos').doc(uid).update({
-        'imageUrls': FieldValue.arrayUnion([image])
-      });
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: ${e.toString()}")),
-      );
-    }
-  }
-
-  Future<void> _deletePhoto(String uid, ImageData image) async {
-    try {
-      await _firestore.collection('photos').doc(uid).update({
-        'imageUrls': FieldValue.arrayRemove([image])
-      });
-      await _deleteFromCloudinary(image['imageUrl']);
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: ${e.toString()}")),
-      );
-    }
+  Future<String> _getUsername(String uid) async {
+    DocumentSnapshot userDoc = await _firestore.collection('users').doc(uid).get();
+    return userDoc.exists ? userDoc['username'] ?? 'Unknown' : 'Unknown';
   }
 
   Future<void> _deleteFromCloudinary(String imageUrl) async {
     try {
-      String cloudName = dotenv.env['CLOUDINARY_CLOUD_NAME']!;
-      String apiKey = dotenv.env['CLOUDINARY_API_KEY']!;
-      String apiSecret = dotenv.env['CLOUDINARY_API_SECRET']!;
+      String? cloudName = dotenv.env['CLOUDINARY_CLOUD_NAME'];
+      String? apiKey = dotenv.env['CLOUDINARY_API_KEY'];
+      String? apiSecret = dotenv.env['CLOUDINARY_API_SECRET'];
+
+      if (cloudName == null || apiKey == null || apiSecret == null) {
+        print("Error: Cloudinary credentials are missing.");
+        return;
+      }
+
       Uri uri = Uri.parse(imageUrl);
       String fileName = uri.pathSegments.last.split('.').first;
       String publicId = "absensi/$fileName";
-      String timestamp =
-          (DateTime.now().millisecondsSinceEpoch ~/ 1000).toString();
-      String stringToSign =
-          'public_id=$publicId&timestamp=$timestamp$apiSecret';
+
+      String timestamp = (DateTime.now().millisecondsSinceEpoch ~/ 1000).toString();
+      String stringToSign = 'public_id=$publicId&timestamp=$timestamp$apiSecret';
       String signature = sha1.convert(utf8.encode(stringToSign)).toString();
-      String apiUrl =
-          'https://api.cloudinary.com/v1_1/$cloudName/image/destroy';
+
+      String apiUrl = 'https://api.cloudinary.com/v1_1/$cloudName/image/destroy';
+
       var response = await http.post(
         Uri.parse(apiUrl),
         body: {
@@ -135,12 +104,43 @@ class _AdminHomePageState extends State<AdminHomePage> {
           'invalidate': 'true',
         },
       );
-      if (response.statusCode != 200) {
-        print("Gagal menghapus dari Cloudinary: ${response.body}");
+
+      if (response.statusCode == 200) {
+        print("✅ Berhasil menghapus dari Cloudinary.");
+      } else {
+        print("⚠️ Gagal menghapus dari Cloudinary: ${response.body}");
       }
     } catch (e) {
-      print("Error menghapus dari Cloudinary: $e");
+      print("❌ Error menghapus dari Cloudinary: $e");
     }
+  }
+
+  Future<void> _updateStatus(String uid, ImageData image, String newStatus) async {
+    try {
+      await _firestore.collection('photos').doc(uid).update({
+        'imageUrls': FieldValue.arrayRemove([image])
+      });
+
+      image['status'] = newStatus;
+      await _firestore.collection('photos').doc(uid).update({
+        'imageUrls': FieldValue.arrayRemove([image])
+      });
+      await _deleteFromCloudinary(image['imageUrl']);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Foto telah diproses dan dihapus.")),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: ${e.toString()}")),
+      );
+    }
+  }
+
+  void _toggleUserPhotos(String uid) {
+    setState(() {
+      selectedUserId = selectedUserId == uid ? null : uid;
+    });
   }
 
   @override
@@ -155,123 +155,68 @@ class _AdminHomePageState extends State<AdminHomePage> {
           ),
         ],
       ),
-      
       body: Column(
-  children: [
-    // Form Tambah Admin
-    Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Column(
         children: [
-          TextField(
-            controller: _emailController,
-            decoration: InputDecoration(labelText: 'Email Admin'),
-          ),
-          TextField(
-            controller: _passwordController,
-            decoration: InputDecoration(labelText: 'Password'),
-            obscureText: true,
-          ),
-          SizedBox(height: 10),
-          ElevatedButton(
-            onPressed: _addAdmin,
-            child: Text('Tambah Admin'),
-          ),
-        ],
-      ),
-    ),
-
-    // Daftar Admin
-    Expanded(
-  child: StreamBuilder(
-    stream: _firestore.collection('users').where('role', isEqualTo: 'admin').snapshots(),
-    builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
-      if (!snapshot.hasData) {
-        return Center(child: CircularProgressIndicator());
-      }
-
-      return ListView(
-        children: snapshot.data!.docs.map((doc) {
-          Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-
-          // Cek apakah 'email' ada dalam dokumen
-          if (!data.containsKey('email')) {
-            return SizedBox(); // Jika tidak ada, jangan tampilkan apa pun
-          }
-
-          String email = data['email'];
-          return ListTile(
-            title: Text(email),
-            trailing: IconButton(
-              icon: Icon(Icons.delete, color: Colors.red),
-              onPressed: () => _deleteAdmin(email),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Column(
+              children: [
+                TextField(controller: _emailController, decoration: InputDecoration(labelText: 'Email Admin')),
+                TextField(controller: _passwordController, decoration: InputDecoration(labelText: 'Password'), obscureText: true),
+                SizedBox(height: 10),
+                ElevatedButton(onPressed: _addAdmin, child: Text('Tambah Admin')),
+              ],
             ),
-          );
-        }).toList(),
-      );
-    },
-  ),
-),
-
-
-    // Daftar Foto
-    Expanded(
-      child: StreamBuilder(
-        stream: _firestore.collection('photos').snapshots(),
-        builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
-          if (!snapshot.hasData) {
-            return Center(child: CircularProgressIndicator());
-          }
-
-          return ListView(
-            children: snapshot.data!.docs.map((doc) {
-              String uid = doc.id;
-              Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-              List<ImageData> imageUrls = List<ImageData>.from(data['imageUrls'] ?? []);
-
-              return imageUrls.isEmpty
-                  ? SizedBox() // Tidak menampilkan Card jika tidak ada gambar
-                  : Card(
+          ),
+          Expanded(
+            child: StreamBuilder(
+              stream: _firestore.collection('photos').snapshots(),
+              builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
+                if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
+                return ListView(
+                  children: snapshot.data!.docs.map((doc) {
+                    String uid = doc.id;
+                    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+                    List<ImageData> imageUrls = List<ImageData>.from(data['imageUrls'] ?? []);
+                    return Card(
                       margin: EdgeInsets.all(10),
                       child: Column(
                         children: [
-                          Text('User ID: $uid', style: TextStyle(fontWeight: FontWeight.bold)),
-                          ...imageUrls.map((image) => Column(
-                                children: [
-                                  Image.network(image['imageUrl']),
-                                  Text('Status: ${image['status']}'),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                    children: [
-                                      ElevatedButton(
-                                        onPressed: () => _updateStatus(uid, image, "Approved"),
-                                        child: Text("Approve"),
-                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                                      ),
-                                      ElevatedButton(
-                                        onPressed: () => _updateStatus(uid, image, "Rejected"),
-                                        child: Text("Reject"),
-                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                                      ),
-                                      IconButton(
-                                        icon: Icon(Icons.delete, color: Colors.red),
-                                        onPressed: () => _deletePhoto(uid, image),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              )),
+                          ListTile(
+                            leading: Icon(Icons.folder, color: Colors.amber, size: 40),
+                            title: FutureBuilder<String>(
+                              future: _getUsername(uid),
+                              builder: (context, userSnapshot) => Text('User: ${userSnapshot.data ?? 'Loading...'}', style: TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                            trailing: Icon(selectedUserId == uid ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down),
+                            onTap: () => _toggleUserPhotos(uid),
+                          ),
+                          if (selectedUserId == uid) ...imageUrls.map((image) => Column(children: [Image.network(image['imageUrl']), Text('Status: ${image['status']}'),
+                          Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                              children: [
+                                                ElevatedButton(
+                                                  onPressed: () => _updateStatus(uid, image, "Approved"),
+                                                  child: Text("Approve"),
+                                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                                                ),
+                                                ElevatedButton(
+                                                  onPressed: () => _updateStatus(uid, image, "Rejected"),
+                                                  child: Text("Reject"),
+                                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                                                ),
+                                              ],
+                                            ),]))
                         ],
                       ),
                     );
-            }).toList(),
-          );
-        },
+                  }).toList(),
+                );
+              },
+            ),
+          ),
+        ],
       ),
-    ),
-  ],
-),
-
     );
   }
 }
