@@ -44,14 +44,16 @@ class AuthHandler extends StatelessWidget {
             return AuthScreen();
           } else {
             return FutureBuilder<DocumentSnapshot>(
-              future: FirebaseFirestore.instance.collection('users').doc(user.email).get(),
+              future: FirebaseFirestore.instance.collection('users').doc(user.uid).get(), // Ganti email ke uid
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
                   return Scaffold(body: Center(child: CircularProgressIndicator()));
                 }
                 final userData = snapshot.data!;
                 final role = userData.exists ? userData['role'] : 'user';
-                return role == 'admin' ? AdminHomePage() : MainPage();
+                return role == 'admin' 
+                    ? AdminHomePage() 
+                    : MainPage(uid: user.uid); // Pastikan uid diberikan di sini
               },
             );
           }

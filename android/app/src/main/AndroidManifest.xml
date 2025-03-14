@@ -10,6 +10,12 @@
         android:label="absensi"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        
+        <activity android:name="com.yalantis.ucrop.UCropActivity"
+        android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+        android:windowSoftInputMode="adjustResize"
+        android:screenOrientation="portrait"
+        android:configChanges="orientation|keyboardHidden|keyboard|screenSize" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
