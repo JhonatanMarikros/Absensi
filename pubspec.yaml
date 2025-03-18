@@ -72,10 +72,8 @@ dev_dependencies:
 flutter:
   assets:
     - assets/default_profile.png
-    - assets/images/
-    - assets/sbm.jpg
-    - assets/SBM.png
     - assets/SBMNEW.png
+
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
