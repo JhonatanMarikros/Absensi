@@ -7,9 +7,14 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 class UploadFilePage extends StatefulWidget {
+  final String statusCheckInCheckOut;
+
+  UploadFilePage({required this.statusCheckInCheckOut});
+
   @override
   _UploadFilePageState createState() => _UploadFilePageState();
 }
+
 
 class _UploadFilePageState extends State<UploadFilePage> {
   File? _selectedFile;
@@ -98,30 +103,17 @@ class _UploadFilePageState extends State<UploadFilePage> {
       Map<String, dynamic> newImage = {
         'imageUrl': imageUrl,
         'status': 'pending',
-        'timestamp': Timestamp.now(), // ✅ Ganti FieldValue.serverTimestamp() dengan Timestamp.now()
+        'timestamp': Timestamp.now(),
+        'statusCheckInCheckOut': widget.statusCheckInCheckOut, // ✅ Tambahkan status ini
       };
 
       if (snapshot.exists) {
-        // Jika dokumen sudah ada, update array
         await docRef.update({
-          'imageUrls': FieldValue.arrayUnion([
-            {
-              'imageUrl': imageUrl,
-              'status': 'pending',
-              'timestamp': Timestamp.now(), // Gunakan Timestamp.now()
-            }
-          ]),
+          'imageUrls': FieldValue.arrayUnion([newImage]),
         });
       } else {
-        // Jika dokumen belum ada, buat baru
         await docRef.set({
-          'imageUrls': [
-            {
-              'imageUrl': imageUrl,
-              'status': 'pending',
-              'timestamp': Timestamp.now(), // Gunakan Timestamp.now()
-            }
-          ]
+          'imageUrls': [newImage],
         });
       }
 
@@ -140,6 +132,7 @@ class _UploadFilePageState extends State<UploadFilePage> {
     );
   }
 }
+
 
 
 

@@ -7,11 +7,14 @@ import 'dart:convert';
 import 'dart:io';
 
 class CameraPage extends StatefulWidget {
-  const CameraPage({Key? key}) : super(key: key);
+  final String statusCheckInCheckOut;
+
+  CameraPage({required this.statusCheckInCheckOut});
 
   @override
   _CameraPageState createState() => _CameraPageState();
 }
+
 
 class _CameraPageState extends State<CameraPage> {
   late CameraController _controller;
@@ -73,65 +76,52 @@ class _CameraPageState extends State<CameraPage> {
   }
 
   Future<void> _submitPhoto() async {
-    if (_capturedImage == null) return;
+  if (_capturedImage == null) return;
 
-    User? user = _auth.currentUser;
-    if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('User not logged in!')),
-      );
-      return;
-    }
-
-    String uid = user.uid;
-    String? imageUrl = await _uploadToCloudinary(_capturedImage!);
-
-    if (imageUrl != null) {
-      DocumentReference docRef = _firestore.collection('photos').doc(uid);
-      DocumentSnapshot snapshot = await docRef.get();
-
-      Map<String, dynamic> newImage = {
-        'imageUrl': imageUrl,
-        'status': 'pending',
-        'timestamp': Timestamp.now(), // ✅ Ganti FieldValue.serverTimestamp()
-      };
-
-      if (snapshot.exists) {
-        // Jika dokumen sudah ada, update array
-        await docRef.update({
-          'imageUrls': FieldValue.arrayUnion([
-            {
-              'imageUrl': imageUrl,
-              'status': 'pending',
-              'timestamp': Timestamp.now(), // Gunakan Timestamp.now()
-            }
-          ]),
-        });
-      } else {
-        // Jika dokumen belum ada, buat baru
-        await docRef.set({
-          'imageUrls': [
-            {
-              'imageUrl': imageUrl,
-              'status': 'pending',
-              'timestamp': Timestamp.now(), // Gunakan Timestamp.now()
-            }
-          ]
-        });
-      }
-
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Photo uploaded successfully!')),
-      );
-
-      setState(() {
-        _capturedImage = null;
-      });
-
-      Navigator.pop(context);
-    }
+  User? user = _auth.currentUser;
+  if (user == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('User not logged in!')),
+    );
+    return;
   }
+
+  String uid = user.uid;
+  String? imageUrl = await _uploadToCloudinary(_capturedImage!);
+
+  if (imageUrl != null) {
+    DocumentReference docRef = _firestore.collection('photos').doc(uid);
+    DocumentSnapshot snapshot = await docRef.get();
+
+    Map<String, dynamic> newImage = {
+      'imageUrl': imageUrl,
+      'status': 'pending',
+      'timestamp': Timestamp.now(),
+      'statusCheckInCheckOut': widget.statusCheckInCheckOut, // ✅ Tambahkan status ini
+    };
+
+    if (snapshot.exists) {
+      await docRef.update({
+        'imageUrls': FieldValue.arrayUnion([newImage]),
+      });
+    } else {
+      await docRef.set({
+        'imageUrls': [newImage],
+      });
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Photo uploaded successfully!')),
+    );
+
+    setState(() {
+      _capturedImage = null;
+    });
+
+    Navigator.pop(context);
+  }
+}
+
 
   Future<String?> _uploadToCloudinary(File imageFile) async {
     try {
