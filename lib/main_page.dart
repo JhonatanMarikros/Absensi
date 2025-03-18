@@ -119,6 +119,7 @@ class MainPage extends StatefulWidget {
 class _MainPageState extends State<MainPage> {
   int _selectedIndex = 0;
   String username = "";
+  String position = "";
   String profileUrl = "";
   double logoSize = 150.0;
   double logoTopPadding = 5.0;
@@ -131,12 +132,12 @@ class _MainPageState extends State<MainPage> {
   }
 
   void _getUserData() async {
-    DocumentSnapshot userDoc =
-        await FirebaseFirestore.instance.collection('users').doc(widget.uid).get();
-    
+    DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(widget.uid).get();
+
     if (userDoc.exists) {
       setState(() {
         username = userDoc['username'];
+        position = userDoc['position'] ?? ""; // Ambil position jika tersedia
         profileUrl = userDoc['profile'];
       });
     }
@@ -167,7 +168,7 @@ class _MainPageState extends State<MainPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: PreferredSize(
-        preferredSize: Size.fromHeight(150.0), // Menambah tinggi AppBar
+        preferredSize: Size.fromHeight(150.0), // Tambah tinggi AppBar
         child: AppBar(
           backgroundColor: Color.fromARGB(255, 52, 75, 52),
           centerTitle: true,
@@ -180,6 +181,23 @@ class _MainPageState extends State<MainPage> {
                   child: Padding(
                     padding: EdgeInsets.only(top: logoTopPadding),
                     child: Image.asset('assets/SBMNEW.png', height: logoSize),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.center,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 80.0),
+                    child: Text(
+                      username.isNotEmpty
+                          ? "$username - $position" // Gabungkan username dan position
+                          : "Loading...",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                 ),
                 if (profileUrl.isNotEmpty)
@@ -209,7 +227,7 @@ class _MainPageState extends State<MainPage> {
           ),
         ),
       ),
-      body: _pages[_selectedIndex], 
+      body: _pages[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         currentIndex: _selectedIndex,
