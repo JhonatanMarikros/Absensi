@@ -52,6 +52,11 @@ dependencies:
   flutter_dotenv: ^5.2.1
   crypto: ^3.0.3
   http: ^1.1.0
+  excel: ^2.0.4
+  permission_handler: ^11.0.1
+  app_settings: ^5.1.1
+  syncfusion_flutter_xlsio: ^27.2.5
+  ntp: ^2.0.0
   # gallery_saver: ^2.3.2
 
 dev_dependencies:

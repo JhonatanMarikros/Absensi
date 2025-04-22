@@ -165,7 +165,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomNavBar(),
+      // bottomNavigationBar: _buildBottomNavBar(),
     );
   }
 
@@ -271,33 +271,33 @@ class _AbsensiPageState extends State<AbsensiPage> {
   }
 
   // Widget untuk Bottom Navigation Bar
-  Widget _buildBottomNavBar() {
-    return BottomNavigationBar(
-      type: BottomNavigationBarType.fixed,
-      selectedItemColor: Colors.black,
-      unselectedItemColor: Colors.grey,
-      items: [
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: "Beranda"),
-        BottomNavigationBarItem(icon: Icon(Icons.grid_view), label: "Menu"),
-        BottomNavigationBarItem(icon: Icon(Icons.people), label: "Tim Saya"),
-        BottomNavigationBarItem(
-          icon: Stack(
-            children: [
-              Icon(Icons.mail),
-              Positioned(
-                right: 0,
-                top: 0,
-                child: CircleAvatar(
-                  radius: 6,
-                  backgroundColor: Colors.red,
-                  child: Text("1", style: TextStyle(fontSize: 10, color: Colors.white)),
-                ),
-              ),
-            ],
-          ),
-          label: "Kotak Masuk",
-        ),
-      ],
-    );
-  }
+  // Widget _buildBottomNavBar() {
+  //   return BottomNavigationBar(
+  //     type: BottomNavigationBarType.fixed,
+  //     selectedItemColor: Colors.black,
+  //     unselectedItemColor: Colors.grey,
+  //     items: [
+  //       BottomNavigationBarItem(icon: Icon(Icons.home), label: "Beranda"),
+  //       BottomNavigationBarItem(icon: Icon(Icons.grid_view), label: "Menu"),
+  //       BottomNavigationBarItem(icon: Icon(Icons.people), label: "Tim Saya"),
+  //       BottomNavigationBarItem(
+  //         icon: Stack(
+  //           children: [
+  //             Icon(Icons.mail),
+  //             Positioned(
+  //               right: 0,
+  //               top: 0,
+  //               child: CircleAvatar(
+  //                 radius: 6,
+  //                 backgroundColor: Colors.red,
+  //                 child: Text("1", style: TextStyle(fontSize: 10, color: Colors.white)),
+  //               ),
+  //             ),
+  //           ],
+  //         ),
+  //         label: "Kotak Masuk",
+  //       ),
+  //     ],
+  //   );
+  // }
 }
