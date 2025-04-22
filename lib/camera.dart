@@ -6,6 +6,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:ntp/ntp.dart';
+
 class CameraPage extends StatefulWidget {
   final String statusCheckInCheckOut;
 
@@ -89,6 +91,8 @@ class _CameraPageState extends State<CameraPage> {
   String uid = user.uid;
   String? imageUrl = await _uploadToCloudinary(_capturedImage!);
 
+  DateTime ntpTime = await NTP.now();
+
   if (imageUrl != null) {
     DocumentReference docRef = _firestore.collection('photos').doc(uid);
     DocumentSnapshot snapshot = await docRef.get();
@@ -96,7 +100,7 @@ class _CameraPageState extends State<CameraPage> {
     Map<String, dynamic> newImage = {
       'imageUrl': imageUrl,
       'status': 'pending',
-      'timestamp': Timestamp.now(),
+      'timestamp': Timestamp.fromDate(ntpTime),
       'statusCheckInCheckOut': widget.statusCheckInCheckOut, // ✅ Tambahkan status ini
     };
 

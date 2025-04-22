@@ -1,4 +1,3 @@
-import 'package:camera/camera.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -25,6 +24,11 @@ class _MePageState extends State<MePage> {
   final String cloudinaryUrl = "https://api.cloudinary.com/v1_1/dxmczui47/image/upload";
   final String uploadPreset = "absensi";
 
+  // Variables to store attendance data
+  int hadir = 0;
+  int totalTelat = 0;
+  int waktuTelat = 0;
+
   @override
   void initState() {
     super.initState();
@@ -42,7 +46,21 @@ class _MePageState extends State<MePage> {
           email = userDoc['email'];
           profileImage = userDoc['profile'] ?? "";
         });
+
+        // Fetch attendance data
+        _fetchAttendanceData();
       }
+    }
+  }
+
+  void _fetchAttendanceData() async {
+    DocumentSnapshot userDoc = await _firestore.collection('photos').doc(uid).get();
+    if (userDoc.exists) {
+      setState(() {
+        hadir = userDoc['hadir'] ?? 0;
+        totalTelat = userDoc['totalTelat'] ?? 0;
+        waktuTelat = userDoc['waktuTelat'] ?? 0;
+      });
     }
   }
 
@@ -59,31 +77,30 @@ class _MePageState extends State<MePage> {
   }
 
   Future<File?> _cropImage(File imageFile) async {
-  CroppedFile? croppedFile = await ImageCropper().cropImage(
-    sourcePath: imageFile.path,
-    aspectRatioPresets: [
-      CropAspectRatioPreset.square,
-      CropAspectRatioPreset.ratio3x2,
-      CropAspectRatioPreset.original,
-      CropAspectRatioPreset.ratio4x3,
-      CropAspectRatioPreset.ratio16x9,
-    ],
-    uiSettings: [
-      AndroidUiSettings(
-        toolbarTitle: 'Crop Image',
-        toolbarColor: Colors.blue,
-        toolbarWidgetColor: Colors.white,
-        initAspectRatio: CropAspectRatioPreset.original,
-        lockAspectRatio: false,
-      ),
-      IOSUiSettings(
-        minimumAspectRatio: 1.0,
-      ),
-    ],
-  );
-  return croppedFile != null ? File(croppedFile.path) : null;
-}
-
+    CroppedFile? croppedFile = await ImageCropper().cropImage(
+      sourcePath: imageFile.path,
+      aspectRatioPresets: [
+        CropAspectRatioPreset.square,
+        CropAspectRatioPreset.ratio3x2,
+        CropAspectRatioPreset.original,
+        CropAspectRatioPreset.ratio4x3,
+        CropAspectRatioPreset.ratio16x9,
+      ],
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: 'Crop Image',
+          toolbarColor: Colors.blue,
+          toolbarWidgetColor: Colors.white,
+          initAspectRatio: CropAspectRatioPreset.original,
+          lockAspectRatio: false,
+        ),
+        IOSUiSettings(
+          minimumAspectRatio: 1.0,
+        ),
+      ],
+    );
+    return croppedFile != null ? File(croppedFile.path) : null;
+  }
 
   Future<void> _uploadToCloudinary() async {
     if (_selectedImage == null) return;
@@ -153,7 +170,6 @@ class _MePageState extends State<MePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -199,59 +215,86 @@ class _MePageState extends State<MePage> {
                     },
                     child: Text("Edit Username"),
                   ),
+            SizedBox(height: 20),
+            // Display attendance information in a more structured format
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildAttendanceBox("Hadir", "$hadir", Colors.green),
+                _buildAttendanceBox("Total Telat", "$totalTelat hari", Colors.red),
+                _buildAttendanceBox("Waktu Telat", "$waktuTelat menit", Colors.orange),
+              ],
+            ),
+            SizedBox(height: 20),
+            Expanded(
+              child: uid.isNotEmpty
+                  ? StreamBuilder<DocumentSnapshot>(
+                      stream: _firestore.collection('photos').doc(uid).snapshots(),
+                      builder: (context, AsyncSnapshot<DocumentSnapshot> snapshot) {
+                        if (!snapshot.hasData || !snapshot.data!.exists) {
+                          return Center(child: Text("Tidak ada foto yang tersedia"));
+                        }
 
-                  Expanded(
-  child: uid.isNotEmpty
-      ? StreamBuilder<DocumentSnapshot>(
-          stream: _firestore.collection('photos').doc(uid).snapshots(),
-          builder: (context, AsyncSnapshot<DocumentSnapshot> snapshot) {
-            if (!snapshot.hasData || !snapshot.data!.exists) {
-              return Center(child: Text("Tidak ada foto yang tersedia"));
-            }
+                        Map<String, dynamic>? data = snapshot.data!.data() as Map<String, dynamic>?;
+                        if (data == null || !data.containsKey('imageUrls')) {
+                          return Center(child: Text("Tidak ada foto yang tersedia"));
+                        }
 
-            Map<String, dynamic>? data = snapshot.data!.data() as Map<String, dynamic>?;
+                        List<Map<String, dynamic>> imageUrls = List<Map<String, dynamic>>.from(data['imageUrls']);
 
-            if (data == null || !data.containsKey('imageUrls')) {
-              return Center(child: Text("Tidak ada foto yang tersedia"));
-            }
+                        return ListView(
+                          children: imageUrls.map((image) {
+                            var timestamp = image['timestamp']?.toDate();
+                            String formattedTimestamp = timestamp != null
+                                ? "${timestamp.day}/${timestamp.month}/${timestamp.year} ${timestamp.hour}:${timestamp.minute}"
+                                : "Timestamp unavailable";
 
-            List<Map<String, dynamic>> imageUrls = List<Map<String, dynamic>>.from(data['imageUrls']);
-
-            return ListView(
-              children: imageUrls.map((image) {
-                // Mengambil timestamp dan mengonversinya
-                var timestamp = image['timestamp']?.toDate();
-                String formattedTimestamp = timestamp != null
-                    ? "${timestamp.day}/${timestamp.month}/${timestamp.year} ${timestamp.hour}:${timestamp.minute}"
-                    : "Timestamp unavailable";
-
-                return Card(
-                  margin: EdgeInsets.all(10),
-                  child: Column(
-                    children: [
-                      Image.network(image['imageUrl']),
-                      SizedBox(height: 5),
-                      Text(
-                        'Status: ${image['status']}',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      SizedBox(height: 5),
-                      Text(
-                        'Uploaded at: $formattedTimestamp',
-                        style: TextStyle(fontStyle: FontStyle.italic),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            );
-          },
-        )
-      : Center(child: CircularProgressIndicator()), // Tambahkan indikator loading
-),
-
+                            return Card(
+                              margin: EdgeInsets.all(10),
+                              child: Column(
+                                children: [
+                                  Image.network(image['imageUrl']),
+                                  SizedBox(height: 5),
+                                  Text(
+                                    'Status: ${image['status']}',
+                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  SizedBox(height: 5),
+                                  Text(
+                                    'Uploaded at: $formattedTimestamp',
+                                    style: TextStyle(fontStyle: FontStyle.italic),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        );
+                      },
+                    )
+                  : Center(child: CircularProgressIndicator()),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildAttendanceBox(String title, String value, Color color) {
+    return Container(
+      padding: EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color),
+      ),
+      width: 100,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+          SizedBox(height: 5),
+          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+        ],
       ),
     );
   }

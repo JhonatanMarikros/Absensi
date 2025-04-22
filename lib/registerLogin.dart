@@ -23,19 +23,19 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       UserCredential userCredential;
       if (isLogin) {
-        // LOGIN
+        // Verifikasi pengguna dengan Login
         userCredential = await _auth.signInWithEmailAndPassword(
           email: _emailController.text,
           password: _passwordController.text,
         );
       } else {
-        // REGISTER
+        // Menambahkan data dengan Register
         userCredential = await _auth.createUserWithEmailAndPassword(
           email: _emailController.text,
           password: _passwordController.text,
         );
 
-        // Simpan data pengguna di Firestore
+        // Simpan data pengguna di Firestore Firebase
         await _firestore.collection('users').doc(userCredential.user!.uid).set({
           'uid': userCredential.user!.uid,
           'email': _emailController.text,

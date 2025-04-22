@@ -6,6 +6,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
+import 'package:ntp/ntp.dart';
+
 class UploadFilePage extends StatefulWidget {
   final String statusCheckInCheckOut;
 
@@ -96,6 +98,9 @@ class _UploadFilePageState extends State<UploadFilePage> {
     String uid = user.uid;
     String? imageUrl = await _uploadToCloudinary(_selectedFile!);
 
+    DateTime ntpTime = await NTP.now();
+
+
     if (imageUrl != null) {
       DocumentReference docRef = FirebaseFirestore.instance.collection('photos').doc(uid);
       DocumentSnapshot snapshot = await docRef.get();
@@ -103,7 +108,7 @@ class _UploadFilePageState extends State<UploadFilePage> {
       Map<String, dynamic> newImage = {
         'imageUrl': imageUrl,
         'status': 'pending',
-        'timestamp': Timestamp.now(),
+        'timestamp': Timestamp.fromDate(ntpTime),
         'statusCheckInCheckOut': widget.statusCheckInCheckOut, // ✅ Tambahkan status ini
       };
 
