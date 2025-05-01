@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'registerLogin.dart';
 
+typedef ImageData = Map<String, dynamic>;
+
 class AdminHomePage extends StatefulWidget {
   @override
   _AdminHomePageState createState() => _AdminHomePageState();
@@ -21,7 +23,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   @override
   void initState() {
     super.initState();
-    dotenv.load(fileName: ".env"); // Load .env variables
+    dotenv.load(fileName: ".env");
   }
 
   void _logout() async {
@@ -46,8 +48,9 @@ class _AdminHomePageState extends State<AdminHomePage> {
     try {
       UserCredential userCredential = await _auth
           .createUserWithEmailAndPassword(email: email, password: password);
-
-      await _firestore.collection('users').doc(userCredential.user!.email).set({
+      await _firestore.collection('users').doc(userCredential.user!.uid).set({
+        'uid': userCredential.user!.uid,
+        'email': email,
         'role': 'admin',
       });
 
@@ -64,27 +67,16 @@ class _AdminHomePageState extends State<AdminHomePage> {
     }
   }
 
-  void _deleteAdmin(String email) async {
+  Future<void> _updateStatus(
+      String uid, ImageData image, String newStatus) async {
     try {
-      await _firestore.collection('users').doc(email).delete();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Admin $email berhasil dihapus!")),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: ${e.toString()}")),
-      );
-    }
-  }
-
-  void _updateStatus(String docId, String newStatus) async {
-    try {
-      await _firestore.collection('photos').doc(docId).update({
-        'status': newStatus,
+      await _firestore.collection('photos').doc(uid).update({
+        'imageUrls': FieldValue.arrayRemove([image])
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Status berhasil diperbarui!")),
-      );
+      image['status'] = newStatus;
+      await _firestore.collection('photos').doc(uid).update({
+        'imageUrls': FieldValue.arrayUnion([image])
+      });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error: ${e.toString()}")),
@@ -92,14 +84,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
     }
   }
 
-  Future<void> _deletePhoto(String docId, String imageUrl) async {
+  Future<void> _deletePhoto(String uid, ImageData image) async {
     try {
-      await _firestore.collection('photos').doc(docId).delete();
-      await _deleteFromCloudinary(imageUrl);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Foto berhasil dihapus!")),
-      );
+      await _firestore.collection('photos').doc(uid).update({
+        'imageUrls': FieldValue.arrayRemove([image])
+      });
+      await _deleteFromCloudinary(image['imageUrl']);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error: ${e.toString()}")),
@@ -112,22 +102,16 @@ class _AdminHomePageState extends State<AdminHomePage> {
       String cloudName = dotenv.env['CLOUDINARY_CLOUD_NAME']!;
       String apiKey = dotenv.env['CLOUDINARY_API_KEY']!;
       String apiSecret = dotenv.env['CLOUDINARY_API_SECRET']!;
-
-      // Ekstrak `public_id` dari URL Cloudinary
       Uri uri = Uri.parse(imageUrl);
       String fileName = uri.pathSegments.last.split('.').first;
-      String publicId =
-          "absensi/$fileName"; // Sesuaikan dengan folder Cloudinary
-
+      String publicId = "absensi/$fileName";
       String timestamp =
           (DateTime.now().millisecondsSinceEpoch ~/ 1000).toString();
       String stringToSign =
           'public_id=$publicId&timestamp=$timestamp$apiSecret';
       String signature = sha1.convert(utf8.encode(stringToSign)).toString();
-
       String apiUrl =
           'https://api.cloudinary.com/v1_1/$cloudName/image/destroy';
-
       var response = await http.post(
         Uri.parse(apiUrl),
         body: {
@@ -135,17 +119,14 @@ class _AdminHomePageState extends State<AdminHomePage> {
           'api_key': apiKey,
           'timestamp': timestamp,
           'signature': signature,
-          'invalidate': 'true', // Menyegarkan cache Cloudinary
+          'invalidate': 'true',
         },
       );
-
-      if (response.statusCode == 200) {
-        print("Foto berhasil dihapus dari Cloudinary");
-      } else {
-        print("Gagal menghapus foto dari Cloudinary: ${response.body}");
+      if (response.statusCode != 200) {
+        print("Gagal menghapus dari Cloudinary: ${response.body}");
       }
     } catch (e) {
-      print("Error saat menghapus foto dari Cloudinary: $e");
+      print("Error menghapus dari Cloudinary: $e");
     }
   }
 
@@ -161,122 +142,66 @@ class _AdminHomePageState extends State<AdminHomePage> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Form Tambah Admin
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Column(
-              children: [
-                TextField(
-                  controller: _emailController,
-                  decoration: InputDecoration(labelText: 'Email Admin'),
-                ),
-                TextField(
-                  controller: _passwordController,
-                  decoration: InputDecoration(labelText: 'Password'),
-                  obscureText: true,
-                ),
-                SizedBox(height: 10),
-                ElevatedButton(
-                  onPressed: _addAdmin,
-                  child: Text('Tambah Admin'),
-                ),
-              ],
-            ),
-          ),
-
-          // Tampilkan daftar admin
-          Expanded(
-            child: StreamBuilder(
-              stream: _firestore
-                  .collection('users')
-                  .where('role', isEqualTo: 'admin')
-                  .snapshots(),
-              builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
-                if (!snapshot.hasData)
-                  return Center(child: CircularProgressIndicator());
-
-                return ListView(
-                  children: snapshot.data!.docs.map((doc) {
-                    String email = doc.id;
-                    return ListTile(
-                      title: Text(email),
-                      trailing: IconButton(
-                        icon: Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => _deleteAdmin(email),
-                      ),
-                    );
-                  }).toList(),
-                );
-              },
-            ),
-          ),
-          Expanded(
-            child: StreamBuilder(
-              stream: _firestore.collection('photos').snapshots(),
-              builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
-                if (!snapshot.hasData)
-                  return Center(child: CircularProgressIndicator());
-
-                return ListView(
-                  children: snapshot.data!.docs.map((doc) {
-                    String imageUrl =
-                        doc['imageUrl']; // Pastikan field Firestore benar
-                    String docId = doc.id;
-                    String status = doc['status'] ?? "Pending";
-
-                    return Card(
+      body: StreamBuilder(
+        stream: _firestore.collection('photos').snapshots(),
+        builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
+          if (!snapshot.hasData) {
+            return Center(child: CircularProgressIndicator());
+          }
+          return ListView(
+            children: snapshot.data!.docs.map((doc) {
+              String uid = doc.id;
+              Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+              List<ImageData> imageUrls =
+                  List<ImageData>.from(data['imageUrls'] ?? []);
+              return imageUrls.isEmpty
+                  ? SizedBox() // Tidak menampilkan Card jika tidak ada gambar
+                  : Card(
                       margin: EdgeInsets.all(10),
                       child: Column(
                         children: [
-                          Image.network(
-                              imageUrl), // Menampilkan gambar dari Cloudinary
-                          Padding(
-                            padding: EdgeInsets.all(8.0),
-                            child: Column(
-                              children: [
-                                Text('Status: $status'),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceEvenly,
-                                  children: [
-                                    ElevatedButton(
-                                      onPressed: () =>
-                                          _updateStatus(docId, "Approved"),
-                                      child: Text("Approve"),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.green,
+                          Text('User ID: $uid',
+                              style: TextStyle(fontWeight: FontWeight.bold)),
+                          ...imageUrls.map((image) => Column(
+                                children: [
+                                  Image.network(image['imageUrl']),
+                                  Text('Status: ${image['status']}'),
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceEvenly,
+                                    children: [
+                                      ElevatedButton(
+                                        onPressed: () => _updateStatus(
+                                            uid, image, "Approved"),
+                                        child: Text("Approve"),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.green,
+                                        ),
                                       ),
-                                    ),
-                                    ElevatedButton(
-                                      onPressed: () =>
-                                          _updateStatus(docId, "Rejected"),
-                                      child: Text("Reject"),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.red,
+                                      ElevatedButton(
+                                        onPressed: () => _updateStatus(
+                                            uid, image, "Rejected"),
+                                        child: Text("Reject"),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.red,
+                                        ),
                                       ),
-                                    ),
-                                    IconButton(
-                                      icon:
-                                          Icon(Icons.delete, color: Colors.red),
-                                      onPressed: () =>
-                                          _deletePhoto(docId, imageUrl),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
+                                      IconButton(
+                                        icon: Icon(Icons.delete,
+                                            color: Colors.red),
+                                        onPressed: () =>
+                                            _deletePhoto(uid, image),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              )),
                         ],
                       ),
                     );
-                  }).toList(),
-                );
-              },
-            ),
-          ),
-        ],
+            }).toList(),
+          );
+        },
       ),
     );
   }
