@@ -11,6 +11,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:app_settings/app_settings.dart';
 import 'dart:convert';
 import 'registerLogin.dart';
+import 'listfoto.dart';
 
 typedef ImageData = Map<String, dynamic>;
 
@@ -124,6 +125,18 @@ class _AdminHomePageState extends State<AdminHomePage> {
       print("❌ Error menghapus dari Cloudinary: $e");
     }
   }
+
+  String _formatTimestamp(dynamic timestamp) {
+  if (timestamp == null) return "Timestamp unavailable";
+  try {
+    final time = (timestamp is Timestamp) ? timestamp.toDate() : timestamp;
+    return "${time.day}/${time.month}/${time.year} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}";
+  } catch (e) {
+    return "Invalid timestamp";
+  }
+}
+
+
 
   Future<void> _updateStatus(
       String uid, ImageData image, String newStatus) async {
@@ -261,88 +274,121 @@ class _AdminHomePageState extends State<AdminHomePage> {
     });
   }
 
-Future<void> _exportPhotosToExcel(BuildContext context) async {
-  try {
-    // Meminta izin akses penyimpanan
-    var status = await Permission.manageExternalStorage.request();
-    if (!status.isGranted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("❌ Izin akses penyimpanan ditolak.")),
-      );
-      return;
-    }
+  Future<void> _exportPhotosToExcel(BuildContext context) async {
+    try {
+      var status = await Permission.manageExternalStorage.request();
+      if (!status.isGranted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("❌ Izin akses penyimpanan ditolak.")),
+        );
+        return;
+      }
 
-    // Membuat file Excel baru
-    var excel = Excel.createExcel();
-    Sheet sheetObject = excel['Photos'];
-    sheetObject.appendRow([
-      'UID',
-      'Image URL',
-      'Status',
-      'CheckIn/Out',
-      'Timestamp',
-      'Kehadiran',
-      'Total Telat (Hari)',
-      'Waktu Telat (Menit)',
-    ]);
+      var excel = Excel.createExcel();
+      Sheet sheetObject = excel['Photos'];
+      sheetObject.appendRow([
+        'Username',
+        'Kehadiran',
+        'Total Telat (Hari)',
+        'Waktu Telat (Menit)',
+        'Image URL',
+        'Status',
+        'CheckIn/Out',
+        'Timestamp',
+      ]);
 
-    // Ambil data dari Firestore
-    QuerySnapshot snapshot =
-        await FirebaseFirestore.instance.collection('photos').get();
+      // Ambil semua data user
+      QuerySnapshot usersSnapshot =
+          await FirebaseFirestore.instance.collection('users').get();
+      Map<String, String> uidToUsername = {};
+      for (var userDoc in usersSnapshot.docs) {
+        var userData = userDoc.data() as Map<String, dynamic>;
+        uidToUsername[userDoc.id] = userData['username'] ?? 'Unknown';
+      }
 
-    for (var doc in snapshot.docs) {
-      String uid = doc.id;
-      var data = doc.data() as Map<String, dynamic>;
+      // Ambil data dari collection photos
+      QuerySnapshot snapshot =
+          await FirebaseFirestore.instance.collection('photos').get();
 
-      int hadir = data['hadir'] ?? 0;
-      int totalTelat = data['totalTelat'] ?? 0;
-      int waktuTelat = data['waktuTelat'] ?? 0;
+      for (var doc in snapshot.docs) {
+        String uid = doc.id;
+        var data = doc.data() as Map<String, dynamic>;
 
-      if (data.containsKey('imageUrls') && data['imageUrls'] is List) {
-        List<dynamic> imageUrls = data['imageUrls'];
+        String username = uidToUsername[uid] ?? 'Unknown';
+        int hadir = data['hadir'] ?? 0;
+        int totalTelat = data['totalTelat'] ?? 0;
+        int waktuTelat = data['waktuTelat'] ?? 0;
 
-        for (var img in imageUrls) {
-          sheetObject.appendRow([
-            uid,
-            img['imageUrl'] ?? '',
-            img['status'] ?? '',
-            img['statusCheckInCheckOut'] ?? '',
-            img['timestamp'] != null
-                ? (img['timestamp'] as Timestamp).toDate().toString()
-                : '',
-            hadir,           // Menambahkan data kehadiran
-            totalTelat,      // Menambahkan data total terlambat
-            waktuTelat,      // Menambahkan data waktu terlambat
-          ]);
+        bool isFirst = true;
+
+        if (data.containsKey('imageUrls') && data['imageUrls'] is List) {
+          List<dynamic> imageUrls = data['imageUrls'];
+
+          for (var img in imageUrls) {
+            sheetObject.appendRow([
+              isFirst ? username : '', // Tampilkan hanya sekali
+              isFirst ? hadir : '',
+              isFirst ? totalTelat : '',
+              isFirst ? waktuTelat : '',
+              img['imageUrl'] ?? '',
+              img['status'] ?? '',
+              img['statusCheckInCheckOut'] ?? '',
+              img['timestamp'] != null
+                  ? (img['timestamp'] as Timestamp).toDate().toString()
+                  : '',
+            ]);
+
+            isFirst =
+                false; // Setelah baris pertama, sisanya kosong untuk kolom pertama
+          }
         }
       }
+
+      final downloadsDir = Directory('/storage/emulated/0/Download');
+      final path = "${downloadsDir.path}/rekap_photos.xlsx";
+
+      File file = File(path)
+        ..createSync(recursive: true)
+        ..writeAsBytesSync(excel.encode()!);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("✅ Data berhasil diekspor ke: $path")),
+      );
+    } catch (e) {
+      print("❌ Error saat ekspor: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("❌ Gagal ekspor data.")),
+      );
     }
-
-    // Simpan ke folder Download secara manual
-    final downloadsDir = Directory('/storage/emulated/0/Download');
-    final path = "${downloadsDir.path}/rekap_photos.xlsx";
-
-    File file = File(path)
-      ..createSync(recursive: true)
-      ..writeAsBytesSync(excel.encode()!);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("✅ Data berhasil diekspor ke: $path")),
-    );
-  } catch (e) {
-    print("❌ Error saat ekspor: $e");
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("❌ Gagal ekspor data.")),
-    );
   }
-}
-
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
+  bool _showAddAdminForm = false;
+
+@override
+Widget build(BuildContext context) {
+  return MaterialApp(
+    theme: ThemeData(
+      appBarTheme: AppBarTheme(
+        backgroundColor: Colors.black, // Ganti warna latar belakang di sini
+      ),
+    ),
+    home: Scaffold(
       appBar: AppBar(
-        title: Text('Admin Management'),
+        title: Row(
+          children: [
+            Image.asset(
+              'assets/SBMNEW.png',
+              width: 60,
+              height: 60,
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'Admin Management',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             icon: Icon(Icons.logout),
@@ -350,101 +396,247 @@ Future<void> _exportPhotosToExcel(BuildContext context) async {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Column(
-              children: [
-                TextField(
-                    controller: _emailController,
-                    decoration: InputDecoration(labelText: 'Email Admin')),
-                TextField(
-                    controller: _passwordController,
-                    decoration: InputDecoration(labelText: 'Password'),
-                    obscureText: true),
-                SizedBox(height: 10),
-                ElevatedButton(
-                    onPressed: _addAdmin, child: Text('Tambah Admin')),
-                ElevatedButton.icon(
-                  onPressed: () => _exportPhotosToExcel(context),
-                  icon: Icon(Icons.download),
-                  label: Text("Export Rekap ke Excel"),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Tombol toggle form tambah admin
+              ElevatedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _showAddAdminForm = !_showAddAdminForm;
+                  });
+                },
+                icon: Icon(_showAddAdminForm ? Icons.remove : Icons.add),
+                label: Text(
+                    _showAddAdminForm ? "Tutup Form Admin" : "Tambah Admin"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.indigo,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: StreamBuilder(
-              stream: _firestore.collection('photos').snapshots(),
-              builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
-                if (!snapshot.hasData)
-                  return Center(child: CircularProgressIndicator());
-                return ListView(
-                  children: snapshot.data!.docs.map((doc) {
-                    String uid = doc.id;
-                    Map<String, dynamic> data =
-                        doc.data() as Map<String, dynamic>;
-                    List<ImageData> imageUrls =
-                        List<ImageData>.from(data['imageUrls'] ?? []);
-                    return Card(
-                      margin: EdgeInsets.all(10),
-                      child: Column(
-                        children: [
-                          ListTile(
-                            leading: Icon(Icons.folder,
-                                color: Colors.amber, size: 40),
-                            title: FutureBuilder<String>(
-                              future: _getUsername(uid),
-                              builder: (context, userSnapshot) => Text(
-                                  'User: ${userSnapshot.data ?? 'Loading...'}',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.bold)),
-                            ),
-                            trailing: Icon(selectedUserId == uid
-                                ? Icons.keyboard_arrow_up
-                                : Icons.keyboard_arrow_down),
-                            onTap: () => _toggleUserPhotos(uid),
+              ),
+              const SizedBox(height: 16),
+
+              // Form Tambah Admin dengan animasi
+              AnimatedCrossFade(
+                crossFadeState: _showAddAdminForm
+                    ? CrossFadeState.showFirst
+                    : CrossFadeState.showSecond,
+                duration: Duration(milliseconds: 300),
+                firstChild: Card(
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        Text(
+                          'Form Tambah Admin',
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _emailController,
+                          decoration: const InputDecoration(
+                            labelText: 'Email Admin',
+                            prefixIcon: Icon(Icons.email),
+                            border: OutlineInputBorder(),
                           ),
-                          if (selectedUserId == uid)
-                            ...imageUrls.map((image) => Column(children: [
-                                  Image.network(image['imageUrl']),
-                                  Text('Status: ${image['status']}'),
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceEvenly,
-                                    children: [
-                                      ElevatedButton(
-                                        onPressed: () => _updateStatus(
-                                            uid, image, "Approved"),
-                                        child: Text("Approve"),
-                                        style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.green),
-                                      ),
-                                      ElevatedButton(
-                                        onPressed: () => _updateStatus(
-                                            uid, image, "Rejected"),
-                                        child: Text("Reject"),
-                                        style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.red),
-                                      ),
-                                    ],
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _passwordController,
+                          obscureText: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Password',
+                            prefixIcon: Icon(Icons.lock),
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: _addAdmin,
+                          icon: Icon(Icons.save),
+                          label: Text("Simpan Admin"),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.indigo,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                secondChild: SizedBox.shrink(),
+              ),
+
+              const SizedBox(height: 24),
+
+              // Tombol export excel
+              ElevatedButton.icon(
+                onPressed: () => _exportPhotosToExcel(context),
+                icon: const Icon(Icons.download),
+                label: const Text("Export Rekap ke Excel"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.teal,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Daftar approval foto
+              StreamBuilder(
+                stream: _firestore.collection('photos').snapshots(),
+                builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                      return ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: snapshot.data!.docs.length,
+                        itemBuilder: (context, index) {
+                          String uid = snapshot.data!.docs[index].id;
+                          Map<String, dynamic> data = snapshot.data!.docs[index]
+                              .data() as Map<String, dynamic>;
+                          List imageUrls = data['imageUrls'] ?? [];
+
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 10),
+                            elevation: 3,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                            child: Column(
+                              children: [
+                                ListTile(
+                                  leading: FutureBuilder<DocumentSnapshot>(
+                                    future: _firestore.collection('users').doc(uid).get(),
+                                    builder: (context, userSnapshot) {
+                                      if (userSnapshot.connectionState == ConnectionState.waiting) {
+                                        return const CircleAvatar(
+                                          backgroundColor: Colors.grey,
+                                          child: Icon(Icons.person, color: Colors.white),
+                                        );
+                                      }
+                                      if (userSnapshot.hasData && userSnapshot.data!.data() != null) {
+                                        var userData = userSnapshot.data!.data() as Map<String, dynamic>;
+                                        String? profileUrl = userData['profile'];
+                                        if (profileUrl != null && profileUrl.isNotEmpty) {
+                                          return CircleAvatar(
+                                            backgroundImage: NetworkImage(profileUrl),
+                                          );
+                                        }
+                                      }
+                                      return const CircleAvatar(
+                                        backgroundColor: Colors.grey,
+                                        child: Icon(Icons.person, color: Colors.white),
+                                      );
+                                    },
                                   ),
-                                ]))
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
+                                  title: FutureBuilder<String>(
+                                    future: _getUsername(uid),
+                                    builder: (context, userSnapshot) {
+                                      return Text(
+                                        'User: ${userSnapshot.data ?? 'Loading...'}',
+                                        style: const TextStyle(fontWeight: FontWeight.w600),
+                                      );
+                                    },
+                                  ),
+                                  trailing: Icon(
+                                    selectedUserId == uid
+                                        ? Icons.keyboard_arrow_up
+                                        : Icons.keyboard_arrow_down,
+                                  ),
+                                  onTap: () {
+                                    // Navigasi ke halaman baru (ListFotoPage)
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => ListFotoPage(uid: uid),
+                                      ),
+                                    );
+                                  },
+                                ),
+                                if (selectedUserId == uid)
+                                Column(
+                                  children: imageUrls.map<Widget>((image) {
+                                    final timestamp = image['timestamp'];
+                                    final formattedTimestamp = _formatTimestamp(timestamp);
+
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          ClipRRect(
+                                            borderRadius: BorderRadius.circular(8),
+                                            child: Image.network(
+                                              image['imageUrl'],
+                                              height: 200,
+                                              width: double.infinity,
+                                              fit: BoxFit.cover,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text('Status: ${image['status']}'),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'Uploaded at: $formattedTimestamp',
+                                            style: const TextStyle(
+                                              fontStyle: FontStyle.italic,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                            children: [
+                                              ElevatedButton.icon(
+                                                onPressed: () => _updateStatus(uid, image, "Approved"),
+                                                icon: const Icon(Icons.check),
+                                                label: const Text("Approve"),
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: Colors.green,
+                                                ),
+                                              ),
+                                              ElevatedButton.icon(
+                                                onPressed: () => _updateStatus(uid, image, "Rejected"),
+                                                icon: const Icon(Icons.close),
+                                                label: const Text("Reject"),
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: Colors.red,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const Divider(height: 30),
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
+                                )
+
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  )
+          
+            ]
+          )))));
 }
+                            
+                  
+                  
+          
 
 // import 'package:flutter/material.dart';
 // import 'package:firebase_auth/firebase_auth.dart';
@@ -715,3 +907,4 @@ Future<void> _exportPhotosToExcel(BuildContext context) async {
 //     )    ;
 //   }
 // }
+}

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:ntp/ntp.dart';
 
 class CameraPage extends StatefulWidget {
@@ -16,7 +15,6 @@ class CameraPage extends StatefulWidget {
   @override
   _CameraPageState createState() => _CameraPageState();
 }
-
 
 class _CameraPageState extends State<CameraPage> {
   late CameraController _controller;
@@ -89,8 +87,16 @@ class _CameraPageState extends State<CameraPage> {
   }
 
   String uid = user.uid;
-  String? imageUrl = await _uploadToCloudinary(_capturedImage!);
 
+  // Ambil username dari koleksi 'users'
+  DocumentSnapshot userSnapshot = await _firestore.collection('users').doc(uid).get();
+  String username = '';
+  if (userSnapshot.exists && userSnapshot.data() != null) {
+    final data = userSnapshot.data() as Map<String, dynamic>;
+    username = data['username'] ?? '';
+  }
+
+  String? imageUrl = await _uploadToCloudinary(_capturedImage!);
   DateTime ntpTime = await NTP.now();
 
   if (imageUrl != null) {
@@ -101,15 +107,17 @@ class _CameraPageState extends State<CameraPage> {
       'imageUrl': imageUrl,
       'status': 'pending',
       'timestamp': Timestamp.fromDate(ntpTime),
-      'statusCheckInCheckOut': widget.statusCheckInCheckOut, // ✅ Tambahkan status ini
+      'statusCheckInCheckOut': widget.statusCheckInCheckOut,
     };
 
     if (snapshot.exists) {
       await docRef.update({
+        'username': username, // ✅ Update username jika berubah
         'imageUrls': FieldValue.arrayUnion([newImage]),
       });
     } else {
       await docRef.set({
+        'username': username, // ✅ Simpan username di luar array image
         'imageUrls': [newImage],
       });
     }
@@ -125,7 +133,6 @@ class _CameraPageState extends State<CameraPage> {
     Navigator.pop(context);
   }
 }
-
 
   Future<String?> _uploadToCloudinary(File imageFile) async {
     try {
@@ -154,7 +161,22 @@ class _CameraPageState extends State<CameraPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Camera Example')),
+      backgroundColor: Colors.grey[900],
+      appBar: AppBar(
+        backgroundColor: Colors.indigo[900],
+        title: Text(
+          'Take Attendance Photo',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+        ),
+        centerTitle: true,
+        elevation: 4,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.switch_camera, color: Colors.white),
+            onPressed: _switchCamera,
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(
@@ -169,25 +191,48 @@ class _CameraPageState extends State<CameraPage> {
                       }
                     },
                   )
-                : Image.file(_capturedImage!),
+                : Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.file(_capturedImage!, fit: BoxFit.cover),
+                    ),
+                  ),
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              FloatingActionButton(
-                onPressed: _switchCamera,
-                child: const Icon(Icons.switch_camera),
-              ),
-              FloatingActionButton(
-                onPressed: _capturePhoto,
-                child: const Icon(Icons.camera),
-              ),
-              if (_capturedImage != null)
-                FloatingActionButton(
-                  onPressed: _submitPhoto,
-                  child: const Icon(Icons.upload),
+          if (_capturedImage != null)
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: ElevatedButton(
+                onPressed: _submitPhoto,
+                style: ElevatedButton.styleFrom(
+                  primary: Colors.green,
+                  padding: EdgeInsets.symmetric(vertical: 15),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
-            ],
+                child: Text(
+                  'Submit Photo',
+                  style: TextStyle(fontSize: 18, color: Colors.white),
+                ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: ElevatedButton(
+              onPressed: _capturePhoto,
+              style: ElevatedButton.styleFrom(
+                primary: Colors.indigo[900],
+                padding: EdgeInsets.symmetric(vertical: 15),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: Text(
+                'Capture Photo',
+                style: TextStyle(fontSize: 18, color: Colors.white),
+              ),
+            ),
           ),
         ],
       ),

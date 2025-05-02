@@ -24,7 +24,6 @@ class _MePageState extends State<MePage> {
   final String cloudinaryUrl = "https://api.cloudinary.com/v1_1/dxmczui47/image/upload";
   final String uploadPreset = "absensi";
 
-  // Variables to store attendance data
   int hadir = 0;
   int totalTelat = 0;
   int waktuTelat = 0;
@@ -46,8 +45,6 @@ class _MePageState extends State<MePage> {
           email = userDoc['email'];
           profileImage = userDoc['profile'] ?? "";
         });
-
-        // Fetch attendance data
         _fetchAttendanceData();
       }
     }
@@ -108,7 +105,6 @@ class _MePageState extends State<MePage> {
       var request = http.MultipartRequest('POST', Uri.parse(cloudinaryUrl));
       request.fields['upload_preset'] = uploadPreset;
       request.files.add(await http.MultipartFile.fromPath('file', _selectedImage!.path));
-
       var response = await request.send();
       var responseData = await response.stream.bytesToString();
       var jsonData = json.decode(responseData);
@@ -170,10 +166,31 @@ class _MePageState extends State<MePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.indigo[900],
+        title: Row(
+          children: [
+            Icon(Icons.person, color: Colors.white),
+            SizedBox(width: 8),
+            Text(
+              "Profile - Sukses Bersama Mulia",
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+            ),
+            Spacer(),
+            CircleAvatar(
+              backgroundImage: profileImage.isNotEmpty
+                  ? NetworkImage(profileImage)
+                  : AssetImage('assets/profile.jpg') as ImageProvider,
+              radius: 20,
+            ),
+          ],
+        ),
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             GestureDetector(
               onTap: _showImagePickerOptions,
@@ -213,10 +230,19 @@ class _MePageState extends State<MePage> {
                         isEditing = true;
                       });
                     },
-                    child: Text("Edit Username"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.indigo[900],
+                      padding: EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: Text(
+                      "Edit Username",
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
                   ),
             SizedBox(height: 20),
-            // Display attendance information in a more structured format
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -230,40 +256,30 @@ class _MePageState extends State<MePage> {
               child: uid.isNotEmpty
                   ? StreamBuilder<DocumentSnapshot>(
                       stream: _firestore.collection('photos').doc(uid).snapshots(),
-                      builder: (context, AsyncSnapshot<DocumentSnapshot> snapshot) {
+                      builder: (context, snapshot) {
                         if (!snapshot.hasData || !snapshot.data!.exists) {
                           return Center(child: Text("Tidak ada foto yang tersedia"));
                         }
-
                         Map<String, dynamic>? data = snapshot.data!.data() as Map<String, dynamic>?;
                         if (data == null || !data.containsKey('imageUrls')) {
                           return Center(child: Text("Tidak ada foto yang tersedia"));
                         }
-
                         List<Map<String, dynamic>> imageUrls = List<Map<String, dynamic>>.from(data['imageUrls']);
-
                         return ListView(
                           children: imageUrls.map((image) {
                             var timestamp = image['timestamp']?.toDate();
                             String formattedTimestamp = timestamp != null
                                 ? "${timestamp.day}/${timestamp.month}/${timestamp.year} ${timestamp.hour}:${timestamp.minute}"
                                 : "Timestamp unavailable";
-
                             return Card(
                               margin: EdgeInsets.all(10),
                               child: Column(
                                 children: [
                                   Image.network(image['imageUrl']),
                                   SizedBox(height: 5),
-                                  Text(
-                                    'Status: ${image['status']}',
-                                    style: TextStyle(fontWeight: FontWeight.bold),
-                                  ),
+                                  Text('Status: ${image['status']}', style: TextStyle(fontWeight: FontWeight.bold)),
                                   SizedBox(height: 5),
-                                  Text(
-                                    'Uploaded at: $formattedTimestamp',
-                                    style: TextStyle(fontStyle: FontStyle.italic),
-                                  ),
+                                  Text('Uploaded at: $formattedTimestamp', style: TextStyle(fontStyle: FontStyle.italic)),
                                 ],
                               ),
                             );

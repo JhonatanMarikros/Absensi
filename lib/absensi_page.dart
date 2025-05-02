@@ -50,8 +50,10 @@
 //   }
 // }
 
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'masuk_page.dart';
 import 'keluar_page.dart';
 
@@ -62,7 +64,16 @@ class AbsensiPage extends StatefulWidget {
 
 class _AbsensiPageState extends State<AbsensiPage> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  double totalJamKerja = 183.38; // Contoh nilai total jam kerja
+  double totalJamKerja = 183.38;
+  String username = "";
+  String position = "";
+  String profileUrl = "";
+
+  @override
+  void initState() {
+    super.initState();
+    _getUserData(); // ⬅️ panggil saat awal
+  }
 
   Future<void> _recordAttendance(String status, Widget nextPage) async {
     User? user = _auth.currentUser;
@@ -79,21 +90,41 @@ class _AbsensiPageState extends State<AbsensiPage> {
     );
   }
 
+  void _getUserData() async {
+    User? user = _auth.currentUser;
+    if (user != null) {
+      DocumentSnapshot userDoc =
+          await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (userDoc.exists) {
+        setState(() {
+          username = userDoc['username'] ?? "";
+          position = userDoc['position'] ?? "";
+          profileUrl = userDoc['profile'] ?? "";
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        elevation: 0,
+        backgroundColor: Colors.indigo[900],
         title: Row(
           children: [
+            Icon(Icons.access_time_filled_rounded, color: Colors.white),
+            SizedBox(width: 8),
             Text(
-              "Kawan Lama Group",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              "Absensi - Sukses Bersama Mulia",
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
             ),
             Spacer(),
             CircleAvatar(
-              backgroundImage: AssetImage('assets/profile.jpg'), // Ganti dengan foto user
+              backgroundImage: profileUrl.isNotEmpty
+                  ? NetworkImage(profileUrl)
+                  : AssetImage('assets/profile.jpg') as ImageProvider,
               radius: 20,
             ),
           ],
@@ -104,9 +135,8 @@ class _AbsensiPageState extends State<AbsensiPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Profil Pengguna
             Card(
-              color: Colors.black,
+              color: Colors.indigo[900],
               elevation: 4,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               child: Padding(
@@ -117,18 +147,20 @@ class _AbsensiPageState extends State<AbsensiPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "RICHARD CHRISTIAN - I01276",
+                          username.isNotEmpty ? "Hello, $username" : "Loading...",
                           style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                         Text(
-                          "DATA ANALYST (INTERN)",
+                          position,
                           style: TextStyle(color: Colors.white70, fontSize: 14),
                         ),
                       ],
                     ),
                     Spacer(),
                     CircleAvatar(
-                      backgroundImage: AssetImage('assets/profile.jpg'),
+                      backgroundImage: profileUrl.isNotEmpty
+                          ? NetworkImage(profileUrl)
+                          : AssetImage('assets/profile.jpg') as ImageProvider,
                       radius: 25,
                     ),
                   ],
@@ -137,60 +169,45 @@ class _AbsensiPageState extends State<AbsensiPage> {
             ),
             SizedBox(height: 20),
 
-            // Notifikasi Segera Diselesaikan
             Row(
               children: [
-                Expanded(
-                  child: _buildNotificationCard(
-                      "Segera Diselesaikan", "Pelindungan Data Pribadi", "Periode Hingga - 31/12/99"),
-                ),
+                Expanded(child: _buildNotificationCard("Segera Diselesaikan", "Pelindungan Data Pribadi", "Hingga 31/12/99")),
                 SizedBox(width: 10),
-                Expanded(
-                  child: _buildNotificationCard(
-                      "Segera Diselesaikan", "Pernyataan Anggota Kopkari", "Periode Hingga - 31/12/99"),
-                ),
+                Expanded(child: _buildNotificationCard("Segera Diselesaikan", "Pernyataan Anggota Kopkari", "Hingga 31/12/99")),
               ],
             ),
             SizedBox(height: 20),
 
-            // Tombol Check In & Check Out
             _buildFavoriteSection(),
-
             SizedBox(height: 20),
-
-            // Total Jam Kerja
-            _buildTotalJamKerja(),
-
+            
             SizedBox(height: 20),
           ],
         ),
       ),
-      // bottomNavigationBar: _buildBottomNavBar(),
     );
   }
 
-  // Widget untuk Notifikasi
   Widget _buildNotificationCard(String title, String subtitle, String period) {
     return Card(
-      color: Colors.grey[850],
+      color: Colors.red[50],
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 14)),
+            Text(title, style: TextStyle(color: Colors.red[800], fontWeight: FontWeight.bold, fontSize: 14)),
             SizedBox(height: 4),
-            Text(subtitle, style: TextStyle(color: Colors.white, fontSize: 14)),
+            Text(subtitle, style: TextStyle(color: Colors.black87, fontSize: 14)),
             SizedBox(height: 4),
-            Text(period, style: TextStyle(color: Colors.white60, fontSize: 12)),
+            Text(period, style: TextStyle(color: Colors.black54, fontSize: 12)),
           ],
         ),
       ),
     );
   }
 
-  // Widget untuk Bagian Favorit (Check In & Check Out)
   Widget _buildFavoriteSection() {
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -201,15 +218,14 @@ class _AbsensiPageState extends State<AbsensiPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              "Favorit",
+              "Absensi",
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 10),
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 _buildActionButton("Check In", Colors.green, Icons.login, MasukPage()),
-                SizedBox(width: 20),
+                SizedBox(width: 10),
                 _buildActionButton("Check Out", Colors.orange, Icons.logout, KeluarPage()),
               ],
             ),
@@ -219,7 +235,6 @@ class _AbsensiPageState extends State<AbsensiPage> {
     );
   }
 
-  // Widget untuk Tombol Check In & Check Out
   Widget _buildActionButton(String title, Color color, IconData icon, Widget nextPage) {
     return Expanded(
       child: ElevatedButton.icon(
@@ -234,41 +249,9 @@ class _AbsensiPageState extends State<AbsensiPage> {
       ),
     );
   }
+}
 
-  // Widget untuk Total Jam Kerja
-  Widget _buildTotalJamKerja() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          "Total Jam Kerja Saya",
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        SizedBox(height: 10),
-        Center(
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              SizedBox(
-                width: 150,
-                height: 150,
-                child: CircularProgressIndicator(
-                  value: totalJamKerja / 200, // Asumsikan 200 jam max
-                  backgroundColor: Colors.grey[300],
-                  strokeWidth: 8,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
-                ),
-              ),
-              Text(
-                "$totalJamKerja Jam",
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+
 
   // Widget untuk Bottom Navigation Bar
   // Widget _buildBottomNavBar() {
@@ -300,4 +283,4 @@ class _AbsensiPageState extends State<AbsensiPage> {
   //     ],
   //   );
   // }
-}
+

@@ -29,7 +29,7 @@
 //   void _getUserData() async {
 //     DocumentSnapshot userDoc =
 //         await FirebaseFirestore.instance.collection('users').doc(widget.uid).get();
-    
+
 //     if (userDoc.exists) {
 //       setState(() {
 //         username = userDoc['username'];
@@ -80,7 +80,7 @@
 //           ),
 //         ],
 //       ),
-//       body: _pages[_selectedIndex], 
+//       body: _pages[_selectedIndex],
 //       bottomNavigationBar: BottomNavigationBar(
 //         type: BottomNavigationBarType.fixed,
 //         currentIndex: _selectedIndex,
@@ -97,7 +97,6 @@
 //     );
 //   }
 // }
-
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -132,7 +131,10 @@ class _MainPageState extends State<MainPage> {
   }
 
   void _getUserData() async {
-    DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(widget.uid).get();
+    DocumentSnapshot userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.uid)
+        .get();
 
     if (userDoc.exists) {
       setState(() {
@@ -160,7 +162,6 @@ class _MainPageState extends State<MainPage> {
   final List<Widget> _pages = [
     HomeMain(),
     AbsensiPage(),
-    PanduanPage(),
     MePage(),
   ];
 
@@ -168,30 +169,46 @@ class _MainPageState extends State<MainPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: PreferredSize(
-        preferredSize: Size.fromHeight(150.0), // Tambah tinggi AppBar
+        preferredSize: const Size.fromHeight(90.0),
         child: AppBar(
-          backgroundColor: Color.fromARGB(255, 52, 75, 52),
-          centerTitle: true,
+          backgroundColor: const Color.fromARGB(255, 0, 0, 0),
           flexibleSpace: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 10.0),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
             child: Stack(
               children: [
+                // Logo perusahaan di kiri atas
                 Align(
                   alignment: Alignment.topLeft,
-                  child: Padding(
-                    padding: EdgeInsets.only(top: logoTopPadding),
-                    child: Image.asset('assets/SBMNEW.png', height: logoSize),
+                  child: Padding(padding: const EdgeInsets.only(top: 15.0),
+                  
+                  child: Image.asset(
+                    'assets/SBMNEW.png',
+                    height: 300,
                   ),
                 ),
+            ),
+                // Foto profil di kanan atas
+                // if (profileUrl.isNotEmpty)
+                //   Align(
+                //     alignment: Alignment.topRight,
+                //     child: CircleAvatar(
+                //       radius: 35,
+                //       backgroundImage: NetworkImage(profileUrl),
+                //       backgroundColor: const Color.fromARGB(255, 181, 161, 106),
+                //     ),
+                //   ),
+
+                // Username dan posisi di tengah bawah
                 Align(
-                  alignment: Alignment.center,
+                  alignment: Alignment.bottomCenter,
                   child: Padding(
-                    padding: const EdgeInsets.only(top: 80.0),
+                    padding: const EdgeInsets.only(bottom: 25.0),
                     child: Text(
                       username.isNotEmpty
-                          ? "$username - $position" // Gabungkan username dan position
+                          ? "$username - $position"
                           : "Loading...",
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
@@ -200,47 +217,79 @@ class _MainPageState extends State<MainPage> {
                     ),
                   ),
                 ),
-                if (profileUrl.isNotEmpty)
-                  Align(
-                    alignment: Alignment.topRight,
-                    child: Padding(
-                      padding: EdgeInsets.only(top: profileTopPadding),
-                      child: CircleAvatar(
-                        radius: 50,
-                        backgroundImage: NetworkImage(profileUrl),
-                        backgroundColor: Color.fromARGB(255, 181, 161, 106),
-                      ),
-                    ),
-                  ),
+
+                // Tombol logout di kanan bawah
                 Align(
                   alignment: Alignment.bottomRight,
                   child: Padding(
-                    padding: const EdgeInsets.only(right: 10.0, bottom: 70.0),
-                    child: IconButton(
-                      icon: Icon(Icons.logout, color: const Color.fromARGB(255, 159, 16, 16)),
-                      onPressed: () => _logout(context),
-                    ),
+                    padding: const EdgeInsets.only(bottom: 10.0),
+                  child: IconButton(
+                    icon: const Icon(Icons.logout,
+                        color: Color.fromARGB(255, 159, 16, 16)),
+                    onPressed: () => _logout(context),
                   ),
+                ),
                 ),
               ],
             ),
           ),
         ),
       ),
+
+      // Body & BottomNavigationBar tetap
       body: _pages[_selectedIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
-        selectedItemColor: Colors.green[900],
-        unselectedItemColor: Colors.grey,
-        items: [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
-          BottomNavigationBarItem(icon: Icon(Icons.check_circle), label: "Absensi"),
-          BottomNavigationBarItem(icon: Icon(Icons.menu_book), label: "Panduan"),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
+    floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+    floatingActionButton: FloatingActionButton(
+      backgroundColor: Colors.indigo[700],
+      onPressed: () {
+        setState(() {
+          _selectedIndex = 1; // pindah ke Absensi
+        });
+      },
+      child: Icon(Icons.check_circle, size: 30), // Ganti dengan icon absensi/QRIS
+    ),
+    bottomNavigationBar: ClipRRect(
+  borderRadius: const BorderRadius.only(
+    topLeft: Radius.circular(20),
+    topRight: Radius.circular(20),
+  ),
+  child: BottomAppBar(
+    color: Colors.indigo[900],
+    shape: const CircularNotchedRectangle(),
+    notchMargin: 8.0,
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
+      children: [
+        IconButton(
+          icon: Icon(Icons.home, color: _selectedIndex == 0 ? Colors.white : Colors.grey),
+          onPressed: () {
+            setState(() {
+              _selectedIndex = 0;
+            });
+          },
+        ),
+        SizedBox(width: 40), // ruang untuk FAB
+        IconButton(
+          icon: Icon(Icons.person, color: _selectedIndex == 2 ? Colors.white : Colors.grey),
+          onPressed: () {
+            setState(() {
+              _selectedIndex = 2;
+            });
+          },
+        ),
+      
+          SizedBox(width: 40), // ruang untuk FAB
+          IconButton(
+            icon: Icon(Icons.person, color: _selectedIndex == 2 ? Colors.white : Colors.grey),
+            onPressed: () {
+              setState(() {
+                _selectedIndex = 2;
+              });
+            },
+          ),
         ],
       ),
-    );
-  }
+    ),
+  ));
+ }
 }

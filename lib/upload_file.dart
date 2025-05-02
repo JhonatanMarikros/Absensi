@@ -25,6 +25,7 @@ class _UploadFilePageState extends State<UploadFilePage> {
   final String uploadPreset = "absensi";
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   void _pickFile(BuildContext context, FileType fileType) async {
     FilePickerResult? result =
@@ -96,28 +97,38 @@ class _UploadFilePageState extends State<UploadFilePage> {
     }
 
     String uid = user.uid;
-    String? imageUrl = await _uploadToCloudinary(_selectedFile!);
 
+    // Ambil username dari Firestore
+    DocumentSnapshot userSnapshot = await _firestore.collection('users').doc(uid).get();
+    String username = '';
+    if (userSnapshot.exists && userSnapshot.data() != null) {
+      final data = userSnapshot.data() as Map<String, dynamic>;
+      username = data['username'] ?? '';
+    }
+
+    // Upload ke Cloudinary
+    String? imageUrl = await _uploadToCloudinary(_selectedFile!);
     DateTime ntpTime = await NTP.now();
 
-
     if (imageUrl != null) {
-      DocumentReference docRef = FirebaseFirestore.instance.collection('photos').doc(uid);
+      DocumentReference docRef = _firestore.collection('photos').doc(uid);
       DocumentSnapshot snapshot = await docRef.get();
 
       Map<String, dynamic> newImage = {
         'imageUrl': imageUrl,
         'status': 'pending',
         'timestamp': Timestamp.fromDate(ntpTime),
-        'statusCheckInCheckOut': widget.statusCheckInCheckOut, // ✅ Tambahkan status ini
+        'statusCheckInCheckOut': widget.statusCheckInCheckOut,
       };
 
       if (snapshot.exists) {
         await docRef.update({
+          'username': username, // ✅ update/overwrite username jika berubah
           'imageUrls': FieldValue.arrayUnion([newImage]),
         });
       } else {
         await docRef.set({
+          'username': username, // ✅ simpan username di luar image
           'imageUrls': [newImage],
         });
       }
