@@ -59,7 +59,7 @@ class _MasukPageState extends State<MasukPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "Hello, $username selamat pagi :)",
+                          "Hello, $username",
                           style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                         SizedBox(height: 4),

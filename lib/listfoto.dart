@@ -5,8 +5,10 @@ typedef ImageData = Map<String, dynamic>;
 
 class ListFotoPage extends StatefulWidget {
   final String uid;
+  final String username;
 
-  const ListFotoPage({Key? key, required this.uid}) : super(key: key);
+  const ListFotoPage({Key? key, required this.uid, required this.username})
+      : super(key: key);
 
   @override
   _ListFotoPageState createState() => _ListFotoPageState();
@@ -198,6 +200,69 @@ class _ListFotoPageState extends State<ListFotoPage> {
     }
   }
 
+  void _confirmResetDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Konfirmasi Reset"),
+          content: Text(
+              "Anda yakin ingin reset ulang data kehadiran ${widget.username}? Jika reset ulang maka foto yang masih ada akan berubah menjadi pending dan menghapus semua data kehadiran"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("Batal"),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await _resetStatistics();
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text("Reset"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _resetStatistics() async {
+    try {
+      DocumentReference docRef =
+          _firestore.collection('photos').doc(widget.uid);
+      DocumentSnapshot snapshot = await docRef.get();
+
+      if (!snapshot.exists) return;
+
+      List<dynamic> imageUrls = List.from(snapshot['imageUrls'] ?? []);
+
+      // Ubah status menjadi 'Pending' jika foto masih ada
+      for (var img in imageUrls) {
+        if (img.containsKey('imageUrl')) {
+          img['status'] = 'pending';
+          img.remove('statusCheckedIn');
+          img.remove('statusCheckedOut');
+        }
+      }
+
+      await docRef.update({
+        'statistics': FieldValue.delete(),
+        'imageUrls': imageUrls,
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content:
+                Text("Data kehadiran berhasil di-reset dan statistik dihapus")),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error saat reset: ${e.toString()}")),
+      );
+    }
+  }
+
   Widget _buildStatBox(String label, String value) {
     return Expanded(
       child: Column(
@@ -275,6 +340,17 @@ class _ListFotoPageState extends State<ListFotoPage> {
                             _buildStatBox("Waktu Telat", "$waktuTelat mnt"),
                           ],
                         ),
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: ElevatedButton.icon(
+                            onPressed: _confirmResetDialog,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text("Reset Kehadiran"),
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.redAccent),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -322,22 +398,25 @@ class _ListFotoPageState extends State<ListFotoPage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          ElevatedButton.icon(
-                            onPressed: () =>
-                                _updateStatus(widget.uid, image, "Approved"),
-                            icon: const Icon(Icons.check),
-                            label: const Text("Approve"),
-                            style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green),
-                          ),
-                          ElevatedButton.icon(
-                            onPressed: () =>
-                                _updateStatus(widget.uid, image, "Rejected"),
-                            icon: const Icon(Icons.close),
-                            label: const Text("Reject"),
-                            style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red),
-                          ),
+                          if (!(image['statusCheckedIn'] == true ||
+                              image['statusCheckedOut'] == true)) ...[
+                            ElevatedButton.icon(
+                              onPressed: () =>
+                                  _updateStatus(widget.uid, image, "Approved"),
+                              icon: const Icon(Icons.check),
+                              label: const Text("Approve"),
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: () =>
+                                  _updateStatus(widget.uid, image, "Rejected"),
+                              icon: const Icon(Icons.close),
+                              label: const Text("Reject"),
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red),
+                            ),
+                          ],
                           ElevatedButton.icon(
                             onPressed: () => _deletePhoto(widget.uid, image),
                             icon: const Icon(Icons.delete),

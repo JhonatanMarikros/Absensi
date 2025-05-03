@@ -47,15 +47,19 @@ class _AdminHomePageState extends State<AdminHomePage> {
     String password = _passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Email dan Password tidak boleh kosong!")),
-      );
+      _showDialogAdmin("Email dan Password tidak boleh kosong!");
+      return;
+    }
+
+    if (password.length < 6) {
+      _showDialogAdmin("Password harus minimal 6 karakter");
       return;
     }
 
     try {
       UserCredential userCredential = await _auth
           .createUserWithEmailAndPassword(email: email, password: password);
+
       await _firestore.collection('users').doc(userCredential.user!.uid).set({
         'uid': userCredential.user!.uid,
         'email': email,
@@ -65,14 +69,44 @@ class _AdminHomePageState extends State<AdminHomePage> {
       _emailController.clear();
       _passwordController.clear();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Admin berhasil ditambahkan!")),
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text("Sukses"),
+          content: Text("Admin berhasil ditambahkan!"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text("OK"),
+            )
+          ],
+        ),
       );
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        _showDialogAdmin("Email tersebut sudah terdaftar, buat yang baru");
+      } else {
+        _showDialogAdmin("Terjadi kesalahan: ${e.message}");
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: ${e.toString()}")),
-      );
+      _showDialogAdmin("Terjadi kesalahan: ${e.toString()}");
     }
+  }
+
+  void _showDialogAdmin(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("Peringatan"),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text("OK"),
+          )
+        ],
+      ),
+    );
   }
 
   Future<String> _getUsername(String uid) async {
@@ -127,16 +161,14 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   String _formatTimestamp(dynamic timestamp) {
-  if (timestamp == null) return "Timestamp unavailable";
-  try {
-    final time = (timestamp is Timestamp) ? timestamp.toDate() : timestamp;
-    return "${time.day}/${time.month}/${time.year} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}";
-  } catch (e) {
-    return "Invalid timestamp";
+    if (timestamp == null) return "Timestamp unavailable";
+    try {
+      final time = (timestamp is Timestamp) ? timestamp.toDate() : timestamp;
+      return "${time.day}/${time.month}/${time.year} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}";
+    } catch (e) {
+      return "Invalid timestamp";
+    }
   }
-}
-
-  
 
   void _toggleUserPhotos(String uid) {
     setState(() {
@@ -148,14 +180,33 @@ class _AdminHomePageState extends State<AdminHomePage> {
     try {
       var status = await Permission.manageExternalStorage.request();
       if (!status.isGranted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("❌ Izin akses penyimpanan ditolak.")),
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: Text("Akses Ditolak"),
+            content: Text("❌ Izin akses penyimpanan ditolak."),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text("OK"),
+              )
+            ],
+          ),
         );
         return;
       }
 
       var excel = Excel.createExcel();
-      Sheet sheetObject = excel['Photos'];
+
+      // Hapus sheet default jika ada dan bukan sheet kita
+      if (excel.sheets.containsKey('Sheet1')) {
+        excel.delete('Sheet1');
+      }
+
+      String sheetName = 'Photos';
+      Sheet sheetObject = excel[sheetName];
+
+      // Header
       sheetObject.appendRow([
         'Username',
         'Kehadiran',
@@ -176,7 +227,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
         uidToUsername[userDoc.id] = userData['username'] ?? 'Unknown';
       }
 
-      // Ambil data dari collection photos
+      // Ambil data dari koleksi photos
       QuerySnapshot snapshot =
           await FirebaseFirestore.instance.collection('photos').get();
 
@@ -185,9 +236,18 @@ class _AdminHomePageState extends State<AdminHomePage> {
         var data = doc.data() as Map<String, dynamic>;
 
         String username = uidToUsername[uid] ?? 'Unknown';
-        int hadir = data['hadir'] ?? 0;
-        int totalTelat = data['totalTelat'] ?? 0;
-        int waktuTelat = data['waktuTelat'] ?? 0;
+
+        int hadir = 0;
+        int totalTelat = 0;
+        int waktuTelat = 0;
+
+        if (data.containsKey('statistics')) {
+          Map<String, dynamic> stats =
+              Map<String, dynamic>.from(data['statistics']);
+          hadir = stats['hadir'] ?? 0;
+          totalTelat = stats['totalTelat'] ?? 0;
+          waktuTelat = stats['waktuTelat'] ?? 0;
+        }
 
         bool isFirst = true;
 
@@ -196,7 +256,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
           for (var img in imageUrls) {
             sheetObject.appendRow([
-              isFirst ? username : '', // Tampilkan hanya sekali
+              isFirst ? username : '',
               isFirst ? hadir : '',
               isFirst ? totalTelat : '',
               isFirst ? waktuTelat : '',
@@ -207,27 +267,59 @@ class _AdminHomePageState extends State<AdminHomePage> {
                   ? (img['timestamp'] as Timestamp).toDate().toString()
                   : '',
             ]);
-
-            isFirst =
-                false; // Setelah baris pertama, sisanya kosong untuk kolom pertama
+            isFirst = false;
           }
         }
       }
 
+      // Simpan file dengan nama unik
       final downloadsDir = Directory('/storage/emulated/0/Download');
-      final path = "${downloadsDir.path}/rekap_photos.xlsx";
+      if (!downloadsDir.existsSync()) {
+        downloadsDir.createSync(recursive: true);
+      }
 
-      File file = File(path)
+      int index = 0;
+      String filename = 'rekap_photos.xlsx';
+      File file = File('${downloadsDir.path}/$filename');
+
+      while (file.existsSync()) {
+        index++;
+        filename = 'rekap_photos$index.xlsx';
+        file = File('${downloadsDir.path}/$filename');
+      }
+
+      file
         ..createSync(recursive: true)
         ..writeAsBytesSync(excel.encode()!);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("✅ Data berhasil diekspor ke: $path")),
+      // Tampilkan popup sukses
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text("Sukses"),
+          content: Text("✅ Data berhasil diekspor ke:\n${file.path}"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("Tutup"),
+            ),
+          ],
+        ),
       );
     } catch (e) {
       print("❌ Error saat ekspor: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("❌ Gagal ekspor data.")),
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text("Gagal"),
+          content: Text("❌ Gagal ekspor data.\n${e.toString()}"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("OK"),
+            ),
+          ],
+        ),
       );
     }
   }
@@ -235,257 +327,324 @@ class _AdminHomePageState extends State<AdminHomePage> {
   @override
   bool _showAddAdminForm = false;
 
-@override
-Widget build(BuildContext context) {
-  return MaterialApp(
-    debugShowCheckedModeBanner: false,
-    theme: ThemeData(
-      appBarTheme: AppBarTheme(
-        backgroundColor: Colors.black, // Ganti warna latar belakang di sini
-      ),
-    ),
-    home: Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: [
-            Image.asset(
-              'assets/SBMNEW.png',
-              width: 60,
-              height: 60,
-            ),
-            const SizedBox(width: 10),
-            Text(
-              'Admin Management',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.logout),
-            onPressed: _logout,
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          appBarTheme: AppBarTheme(
+            backgroundColor: Colors.black, // Ganti warna latar belakang di sini
           ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Tombol toggle form tambah admin
-              ElevatedButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _showAddAdminForm = !_showAddAdminForm;
-                  });
-                },
-                icon: Icon(_showAddAdminForm ? Icons.remove : Icons.add),
-                label: Text(
-                    _showAddAdminForm ? "Tutup Form Admin" : "Tambah Admin"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.indigo,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
+        ),
+        home: Scaffold(
+            appBar: AppBar(
+              title: Row(
+                children: [
+                  Image.asset(
+                    'assets/SBMNEW.png',
+                    width: 60,
+                    height: 60,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Admin Management',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-
-              // Form Tambah Admin dengan animasi
-              AnimatedCrossFade(
-                crossFadeState: _showAddAdminForm
-                    ? CrossFadeState.showFirst
-                    : CrossFadeState.showSecond,
-                duration: Duration(milliseconds: 300),
-                firstChild: Card(
-                  elevation: 4,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  child: Padding(
+              actions: [
+                IconButton(
+                  icon: Icon(Icons.logout),
+                  onPressed: _logout,
+                ),
+              ],
+            ),
+            body: SingleChildScrollView(
+                child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
-                      children: [
-                        Text(
-                          'Form Tambah Admin',
-                          style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _emailController,
-                          decoration: const InputDecoration(
-                            labelText: 'Email Admin',
-                            prefixIcon: Icon(Icons.email),
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _passwordController,
-                          obscureText: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Password',
-                            prefixIcon: Icon(Icons.lock),
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          onPressed: _addAdmin,
-                          icon: Icon(Icons.save),
-                          label: Text("Simpan Admin"),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.indigo,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                secondChild: SizedBox.shrink(),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Tombol export excel
-              ElevatedButton.icon(
-                onPressed: () => _exportPhotosToExcel(context),
-                icon: const Icon(Icons.download),
-                label: const Text("Export Rekap ke Excel"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.teal,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Daftar approval foto
-              StreamBuilder(
-                stream: _firestore.collection('photos').snapshots(),
-                builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
-                  if (!snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                      return ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: snapshot.data!.docs.length,
-                        itemBuilder: (context, index) {
-                          String uid = snapshot.data!.docs[index].id;
-                          Map<String, dynamic> data = snapshot.data!.docs[index]
-                              .data() as Map<String, dynamic>;
-                          List imageUrls = data['imageUrls'] ?? [];
-
-                          return Card(
-                            margin: const EdgeInsets.symmetric(vertical: 10),
-                            elevation: 3,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
-                            child: Column(
-                              children: [
-                                ListTile(
-                                  leading: FutureBuilder<DocumentSnapshot>(
-                                    future: _firestore.collection('users').doc(uid).get(),
-                                    builder: (context, userSnapshot) {
-                                      if (userSnapshot.connectionState == ConnectionState.waiting) {
-                                        return const CircleAvatar(
-                                          backgroundColor: Colors.grey,
-                                          child: Icon(Icons.person, color: Colors.white),
-                                        );
-                                      }
-                                      if (userSnapshot.hasData && userSnapshot.data!.data() != null) {
-                                        var userData = userSnapshot.data!.data() as Map<String, dynamic>;
-                                        String? profileUrl = userData['profile'];
-                                        if (profileUrl != null && profileUrl.isNotEmpty) {
-                                          return CircleAvatar(
-                                            backgroundImage: NetworkImage(profileUrl),
-                                          );
-                                        }
-                                      }
-                                      return const CircleAvatar(
-                                        backgroundColor: Colors.grey,
-                                        child: Icon(Icons.person, color: Colors.white),
-                                      );
-                                    },
-                                  ),
-
-                                  title: FutureBuilder<String>(
-                                    future: _getUsername(uid),
-                                    builder: (context, userSnapshot) {
-                                      return Text(
-                                        'User: ${userSnapshot.data ?? 'Loading...'}',
-                                        style: const TextStyle(fontWeight: FontWeight.w600),
-                                      );
-                                    },
-                                  ),
-                                  trailing: Icon(
-                                    selectedUserId == uid
-                                        ? Icons.keyboard_arrow_up
-                                        : Icons.keyboard_arrow_down,
-                                  ),
-                                  onTap: () {
-                                    // Navigasi ke halaman baru (ListFotoPage)
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => ListFotoPage(uid: uid),
-                                      ),
-                                    );
-                                  },
-                                ),
-                                if (selectedUserId == uid)
-                                Column(
-                                  children: imageUrls.map<Widget>((image) {
-                                    final timestamp = image['timestamp'];
-                                    final formattedTimestamp = _formatTimestamp(timestamp);
-
-                                    return Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          ClipRRect(
-                                            borderRadius: BorderRadius.circular(8),
-                                            child: Image.network(
-                                              image['imageUrl'],
-                                              height: 200,
-                                              width: double.infinity,
-                                              fit: BoxFit.cover,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text('Status: ${image['status']}'),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            'Uploaded at: $formattedTimestamp',
-                                            style: const TextStyle(
-                                              fontStyle: FontStyle.italic,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          const Divider(height: 30),
-                                        ],
-                                      ),
-                                    );
-                                  }).toList(),
-                                )
-
-                              ],
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Tombol toggle form tambah admin
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _showAddAdminForm = !_showAddAdminForm;
+                              });
+                            },
+                            icon: Icon(
+                                _showAddAdminForm ? Icons.remove : Icons.add),
+                            label: Text(_showAddAdminForm
+                                ? "Tutup Form Admin"
+                                : "Tambah Admin"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.indigo,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
-                          );
-                        },
-                      );
-                    },
-                  )
-          
-            ]
-          )))));
-}
-                            
-                  
-                  
-          
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Form Tambah Admin dengan animasi
+                          AnimatedCrossFade(
+                            crossFadeState: _showAddAdminForm
+                                ? CrossFadeState.showFirst
+                                : CrossFadeState.showSecond,
+                            duration: Duration(milliseconds: 300),
+                            firstChild: Card(
+                              elevation: 4,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      'Form Tambah Admin',
+                                      style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    TextField(
+                                      controller: _emailController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Email Admin',
+                                        prefixIcon: Icon(Icons.email),
+                                        border: OutlineInputBorder(),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    TextField(
+                                      controller: _passwordController,
+                                      obscureText: true,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Password',
+                                        prefixIcon: Icon(Icons.lock),
+                                        border: OutlineInputBorder(),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    ElevatedButton.icon(
+                                      onPressed: _addAdmin,
+                                      icon: Icon(Icons.save),
+                                      label: Text("Simpan Admin"),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.indigo,
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 14),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            secondChild: SizedBox.shrink(),
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // Tombol export excel
+                          ElevatedButton.icon(
+                            onPressed: () => _exportPhotosToExcel(context),
+                            icon: const Icon(Icons.download),
+                            label: const Text("Export Rekap ke Excel"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.teal,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Daftar approval foto
+                          StreamBuilder(
+                            stream: _firestore.collection('photos').snapshots(),
+                            builder: (context,
+                                AsyncSnapshot<QuerySnapshot> snapshot) {
+                              if (!snapshot.hasData) {
+                                return const Center(
+                                    child: CircularProgressIndicator());
+                              }
+                              return ListView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: snapshot.data!.docs.length,
+                                itemBuilder: (context, index) {
+                                  String uid = snapshot.data!.docs[index].id;
+                                  Map<String, dynamic> data =
+                                      snapshot.data!.docs[index].data()
+                                          as Map<String, dynamic>;
+                                  List imageUrls = data['imageUrls'] ?? [];
+
+                                  return Card(
+                                    margin: const EdgeInsets.symmetric(
+                                        vertical: 10),
+                                    elevation: 3,
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(12)),
+                                    child: Column(
+                                      children: [
+                                        ListTile(
+                                          leading:
+                                              FutureBuilder<DocumentSnapshot>(
+                                            future: _firestore
+                                                .collection('users')
+                                                .doc(uid)
+                                                .get(),
+                                            builder: (context, userSnapshot) {
+                                              if (userSnapshot
+                                                      .connectionState ==
+                                                  ConnectionState.waiting) {
+                                                return const CircleAvatar(
+                                                  backgroundColor: Colors.grey,
+                                                  child: Icon(Icons.person,
+                                                      color: Colors.white),
+                                                );
+                                              }
+                                              if (userSnapshot.hasData &&
+                                                  userSnapshot.data!.data() !=
+                                                      null) {
+                                                var userData =
+                                                    userSnapshot.data!.data()
+                                                        as Map<String, dynamic>;
+                                                String? profileUrl =
+                                                    userData['profile'];
+                                                if (profileUrl != null &&
+                                                    profileUrl.isNotEmpty) {
+                                                  return CircleAvatar(
+                                                    backgroundImage:
+                                                        NetworkImage(
+                                                            profileUrl),
+                                                  );
+                                                }
+                                              }
+                                              return const CircleAvatar(
+                                                backgroundColor: Colors.grey,
+                                                child: Icon(Icons.person,
+                                                    color: Colors.white),
+                                              );
+                                            },
+                                          ),
+                                          title:
+                                              FutureBuilder<DocumentSnapshot>(
+                                            future: _firestore
+                                                .collection('users')
+                                                .doc(uid)
+                                                .get(),
+                                            builder: (context, userSnapshot) {
+                                              if (userSnapshot
+                                                      .connectionState ==
+                                                  ConnectionState.waiting) {
+                                                return const Text('Loading...');
+                                              }
+                                              if (userSnapshot.hasData &&
+                                                  userSnapshot.data!.data() !=
+                                                      null) {
+                                                var userData =
+                                                    userSnapshot.data!.data()
+                                                        as Map<String, dynamic>;
+                                                String username =
+                                                    userData['username'] ??
+                                                        'No Username';
+                                                return Text(
+                                                  'User: $username',
+                                                  style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w600),
+                                                );
+                                              }
+                                              return const Text('No Username');
+                                            },
+                                          ),
+                                          trailing: Icon(
+                                            selectedUserId == uid
+                                                ? Icons.keyboard_arrow_up
+                                                : Icons.keyboard_arrow_down,
+                                          ),
+                                          onTap: () {
+                                            // Ambil username dari Firestore dan pastikan username tidak null
+                                            _firestore
+                                                .collection('users')
+                                                .doc(uid)
+                                                .get()
+                                                .then((userSnapshot) {
+                                              if (userSnapshot.exists &&
+                                                  userSnapshot.data() != null) {
+                                                var userData =
+                                                    userSnapshot.data()
+                                                        as Map<String, dynamic>;
+                                                String username =
+                                                    userData['username'] ??
+                                                        'Unknown';
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) =>
+                                                        ListFotoPage(
+                                                            uid: uid,
+                                                            username: username),
+                                                  ),
+                                                );
+                                              }
+                                            });
+                                          },
+                                        ),
+                                        if (selectedUserId == uid)
+                                          Column(
+                                            children:
+                                                imageUrls.map<Widget>((image) {
+                                              final timestamp =
+                                                  image['timestamp'];
+                                              final formattedTimestamp =
+                                                  _formatTimestamp(timestamp);
+
+                                              return Padding(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 12,
+                                                        vertical: 8),
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    ClipRRect(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              8),
+                                                      child: Image.network(
+                                                        image['imageUrl'],
+                                                        height: 200,
+                                                        width: double.infinity,
+                                                        fit: BoxFit.cover,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 6),
+                                                    Text(
+                                                        'Status: ${image['status']}'),
+                                                    const SizedBox(height: 4),
+                                                    Text(
+                                                      'Uploaded at: $formattedTimestamp',
+                                                      style: const TextStyle(
+                                                          fontStyle:
+                                                              FontStyle.italic,
+                                                          fontSize: 12),
+                                                    ),
+                                                    const SizedBox(height: 8),
+                                                    const Divider(height: 30),
+                                                  ],
+                                                ),
+                                              );
+                                            }).toList(),
+                                          )
+                                      ],
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                          )
+                        ])))));
+  }
 
 // import 'package:flutter/material.dart';
 // import 'package:firebase_auth/firebase_auth.dart';
