@@ -136,137 +136,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 }
 
-
-
-  Future<void> _updateStatus(
-      String uid, ImageData image, String newStatus) async {
-    try {
-      DocumentReference docRef = _firestore.collection('photos').doc(uid);
-      DocumentSnapshot snapshot = await docRef.get();
-
-      if (!snapshot.exists) return;
-
-      List<dynamic> imageUrls = List.from(snapshot['imageUrls'] ?? []);
-
-      // Update status gambar yang sedang di-review
-      for (var img in imageUrls) {
-        if (img['imageUrl'] == image['imageUrl']) {
-          img['status'] = newStatus;
-        }
-      }
-
-      await docRef.update({'imageUrls': imageUrls});
-
-      // Ambil semua "Masuk" yang sudah "Approved" untuk hadir & keterlambatan
-      var checkIns = imageUrls
-          .where((img) =>
-              img['statusCheckInCheckOut'] == 'Masuk' &&
-              img['status'] == 'Approved')
-          .map((img) => img['timestamp'] as Timestamp)
-          .toList();
-
-      // Ambil semua "Keluar" yang sudah "Approved" hanya untuk hadir
-      var checkOuts = imageUrls
-          .where((img) =>
-              img['statusCheckInCheckOut'] == 'Keluar' &&
-              img['status'] == 'Approved')
-          .map((img) => img['timestamp'] as Timestamp)
-          .toList();
-
-      // Konversi ke DateTime (lokal) dan kelompokkan berdasarkan tanggal (tanpa jam)
-      Map<String, List<DateTime>> groupedCheckIns = {};
-      Map<String, List<DateTime>> groupedCheckOuts = {};
-
-      for (var ts in checkIns) {
-        DateTime date = ts.toDate().toLocal();
-        String dateKey =
-            "${date.year}-${date.month}-${date.day}"; // Format YYYY-MM-DD
-        groupedCheckIns.putIfAbsent(dateKey, () => []).add(date);
-      }
-
-      for (var ts in checkOuts) {
-        DateTime date = ts.toDate().toLocal();
-        String dateKey = "${date.year}-${date.month}-${date.day}";
-        groupedCheckOuts.putIfAbsent(dateKey, () => []).add(date);
-      }
-
-      // Hitung jumlah hadir dan keterlambatan
-      int hadir = 0;
-      int totalTelat = 0;
-      int waktuTelat = 0; // Total menit keterlambatan
-
-      for (var dateKey in groupedCheckIns.keys) {
-        var ins = groupedCheckIns[dateKey]!;
-        ins.sort();
-
-        bool adaTelat = false;
-        int totalMenitTelatHariIni = 0;
-
-        for (var checkIn in ins) {
-          int jamMasuk = checkIn.hour;
-          int menitMasuk = checkIn.minute;
-
-          // Jika masuk setelah 10:00 AM, dianggap tidak hadir
-          if (jamMasuk >= 10) {
-            print(
-                "❌ Tidak hadir pada $dateKey karena check-in setelah 10:00 AM");
-            continue;
-          }
-
-          // Jika masuk setelah 08:00 AM tetapi sebelum 10:00 AM, hitung keterlambatan
-          if (jamMasuk >= 8) {
-            int telatMenit = ((jamMasuk - 8) * 60) + menitMasuk;
-            totalMenitTelatHariIni += telatMenit;
-            adaTelat = true;
-            print("⏳ Terlambat $telatMenit menit pada $dateKey");
-          }
-        }
-
-        // Jika ada keterlambatan di hari ini, tambahkan ke total
-        if (adaTelat) {
-          totalTelat++; // Hitung jumlah hari terlambat
-          waktuTelat +=
-              totalMenitTelatHariIni; // Hitung total menit keterlambatan
-        }
-
-        // Cek apakah ada pasangan "Keluar" yang sesuai untuk hadir
-        if (groupedCheckOuts.containsKey(dateKey)) {
-          var outs = groupedCheckOuts[dateKey]!;
-          outs.sort(); // Urutkan waktu "Keluar"
-
-          for (var checkIn in ins) {
-            for (var checkOut in outs) {
-              Duration diff = checkOut.difference(checkIn);
-
-              // Validasi hadir: selisih ≥ 12 jam, keluar setelah 20:00
-              if (diff.inHours >= 12 && checkOut.hour >= 20) {
-                hadir++;
-                outs.remove(checkOut); // Hapus "Keluar" yang sudah dipasangkan
-                break;
-              }
-            }
-          }
-        }
-      }
-
-// Simpan jumlah hadir & keterlambatan yang diperbarui
-      await docRef.update({
-        'hadir': hadir,
-        'totalTelat': totalTelat, // Jumlah hari terlambat
-        'waktuTelat': waktuTelat, // Total menit terlambat
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(
-                "Foto telah diproses. Kehadiran: $hadir, Total Telat: $totalTelat hari, Waktu Telat: $waktuTelat menit")),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: ${e.toString()}")),
-      );
-    }
-  }
+  
 
   void _toggleUserPhotos(String uid) {
     setState(() {
@@ -368,6 +238,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
 @override
 Widget build(BuildContext context) {
   return MaterialApp(
+    debugShowCheckedModeBanner: false,
     theme: ThemeData(
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.black, // Ganti warna latar belakang di sini
@@ -495,7 +366,6 @@ Widget build(BuildContext context) {
                   if (!snapshot.hasData) {
                     return const Center(child: CircularProgressIndicator());
                   }
-
                       return ListView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
@@ -594,27 +464,6 @@ Widget build(BuildContext context) {
                                             ),
                                           ),
                                           const SizedBox(height: 8),
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                            children: [
-                                              ElevatedButton.icon(
-                                                onPressed: () => _updateStatus(uid, image, "Approved"),
-                                                icon: const Icon(Icons.check),
-                                                label: const Text("Approve"),
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: Colors.green,
-                                                ),
-                                              ),
-                                              ElevatedButton.icon(
-                                                onPressed: () => _updateStatus(uid, image, "Rejected"),
-                                                icon: const Icon(Icons.close),
-                                                label: const Text("Reject"),
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: Colors.red,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
                                           const Divider(height: 30),
                                         ],
                                       ),

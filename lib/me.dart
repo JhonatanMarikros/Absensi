@@ -277,9 +277,13 @@ class _MePageState extends State<MePage> {
                                 children: [
                                   Image.network(image['imageUrl']),
                                   SizedBox(height: 5),
-                                  Text('Status: ${image['status']}', style: TextStyle(fontWeight: FontWeight.bold)),
-                                  SizedBox(height: 5),
-                                  Text('Uploaded at: $formattedTimestamp', style: TextStyle(fontStyle: FontStyle.italic)),
+                                  Text('Status: ${image['status']}', style: const TextStyle(fontWeight: FontWeight.w500)),
+                                  const SizedBox(height: 4),
+                                  Text('Check-In/Out: ${image['statusCheckInCheckOut'] ?? 'Tidak diketahui'}',
+                                      style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.black54)),
+                                  const SizedBox(height: 4),
+                                  Text('Waktu: $formattedTimestamp', style: const TextStyle(color: Colors.grey)),
+                                  const SizedBox(height: 8),
                                 ],
                               ),
                             );

@@ -17,7 +17,7 @@ class _AuthScreenState extends State<AuthScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   bool isLogin = true;
   String? _selectedPosition;
-  final List<String> _positions = ['Direktur', 'HRD', 'Karyawan', 'Harian'];
+  final List<String> _positions = ['Direktur', 'HRD', 'Karyawan', 'Harian', 'Sales'];
 
   void _authenticate() async {
     try {

@@ -76,63 +76,91 @@ class _CameraPageState extends State<CameraPage> {
   }
 
   Future<void> _submitPhoto() async {
-  if (_capturedImage == null) return;
+    if (_capturedImage == null) return;
 
-  User? user = _auth.currentUser;
-  if (user == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('User not logged in!')),
-    );
-    return;
-  }
+    User? user = _auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('User not logged in!')),
+      );
+      return;
+    }
 
-  String uid = user.uid;
+    String uid = user.uid;
 
-  // Ambil username dari koleksi 'users'
-  DocumentSnapshot userSnapshot = await _firestore.collection('users').doc(uid).get();
-  String username = '';
-  if (userSnapshot.exists && userSnapshot.data() != null) {
-    final data = userSnapshot.data() as Map<String, dynamic>;
-    username = data['username'] ?? '';
-  }
+    // Ambil username dari koleksi 'users'
+    DocumentSnapshot userSnapshot =
+        await _firestore.collection('users').doc(uid).get();
+    String username = '';
+    if (userSnapshot.exists && userSnapshot.data() != null) {
+      final data = userSnapshot.data() as Map<String, dynamic>;
+      username = data['username'] ?? '';
+    }
 
-  String? imageUrl = await _uploadToCloudinary(_capturedImage!);
-  DateTime ntpTime = await NTP.now();
+    DateTime ntpTime = await NTP.now();
+    String today = "${ntpTime.year}-${ntpTime.month}-${ntpTime.day}";
 
-  if (imageUrl != null) {
     DocumentReference docRef = _firestore.collection('photos').doc(uid);
     DocumentSnapshot snapshot = await docRef.get();
 
-    Map<String, dynamic> newImage = {
-      'imageUrl': imageUrl,
-      'status': 'pending',
-      'timestamp': Timestamp.fromDate(ntpTime),
-      'statusCheckInCheckOut': widget.statusCheckInCheckOut,
-    };
-
+    // Cek apakah user sudah absen untuk status ini di hari yang sama
     if (snapshot.exists) {
-      await docRef.update({
-        'username': username, // ✅ Update username jika berubah
-        'imageUrls': FieldValue.arrayUnion([newImage]),
+      final data = snapshot.data() as Map<String, dynamic>;
+      List<dynamic> images = data['imageUrls'] ?? [];
+
+      bool alreadySubmitted = images.any((img) {
+        final Timestamp timestamp = img['timestamp'];
+        final String status = img['statusCheckInCheckOut'] ?? '';
+        final date = timestamp.toDate();
+        String submittedDate = "${date.year}-${date.month}-${date.day}";
+
+        return submittedDate == today && status == widget.statusCheckInCheckOut;
       });
-    } else {
-      await docRef.set({
-        'username': username, // ✅ Simpan username di luar array image
-        'imageUrls': [newImage],
-      });
+
+      if (alreadySubmitted) {
+         _showAbsensiSudahAdaDialog();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  'You have already submitted ${widget.statusCheckInCheckOut} for today.')),
+        );
+        return;
+      }
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Photo uploaded successfully!')),
-    );
+    String? imageUrl = await _uploadToCloudinary(_capturedImage!);
 
-    setState(() {
-      _capturedImage = null;
-    });
+    if (imageUrl != null) {
+      Map<String, dynamic> newImage = {
+        'imageUrl': imageUrl,
+        'status': 'pending',
+        'timestamp': Timestamp.fromDate(ntpTime),
+        'statusCheckInCheckOut': widget.statusCheckInCheckOut,
+      };
 
-    Navigator.pop(context);
+      if (snapshot.exists) {
+        await docRef.update({
+          'username': username,
+          'imageUrls': FieldValue.arrayUnion([newImage]),
+        });
+      } else {
+        await docRef.set({
+          'username': username,
+          'imageUrls': [newImage],
+        });
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Photo uploaded successfully!')),
+      );
+
+      setState(() {
+        _capturedImage = null;
+      });
+
+      Navigator.pop(context);
+    }
   }
-}
 
   Future<String?> _uploadToCloudinary(File imageFile) async {
     try {
@@ -151,6 +179,27 @@ class _CameraPageState extends State<CameraPage> {
       return null;
     }
   }
+
+  void _showAbsensiSudahAdaDialog() {
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: Text("Absensi Ditolak"),
+        content: Text("Anda sudah melakukan absensi ${widget.statusCheckInCheckOut} hari ini."),
+        actions: [
+          TextButton(
+            child: Text("OK"),
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+          ),
+        ],
+      );
+    },
+  );
+}
+
 
   @override
   void dispose() {

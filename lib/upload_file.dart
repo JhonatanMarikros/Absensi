@@ -28,14 +28,23 @@ class _UploadFilePageState extends State<UploadFilePage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   void _pickFile(BuildContext context, FileType fileType) async {
-    FilePickerResult? result =
-        await FilePicker.platform.pickFiles(type: fileType);
-    if (result != null && result.files.single.path != null) {
-      setState(() {
-        _selectedFile = File(result.files.single.path!);
-      });
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(type: fileType);
+      if (result != null && result.files.single.path != null) {
+        setState(() {
+          _selectedFile = File(result.files.single.path!);
+        });
+      } else {
+        print('User canceled or no file selected.');
+      }
+    } catch (e) {
+      print("File picker error: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Gagal mengambil file: $e")),
+      );
     }
   }
+
 
   void _showFilePickerOptions(BuildContext context) {
     showDialog(
@@ -99,21 +108,50 @@ class _UploadFilePageState extends State<UploadFilePage> {
     String uid = user.uid;
 
     // Ambil username dari Firestore
-    DocumentSnapshot userSnapshot = await _firestore.collection('users').doc(uid).get();
+    DocumentSnapshot userSnapshot =
+        await _firestore.collection('users').doc(uid).get();
     String username = '';
     if (userSnapshot.exists && userSnapshot.data() != null) {
       final data = userSnapshot.data() as Map<String, dynamic>;
       username = data['username'] ?? '';
     }
 
+    DateTime ntpTime = await NTP.now();
+    String today = "${ntpTime.year}-${ntpTime.month}-${ntpTime.day}";
+
+    DocumentReference docRef = _firestore.collection('photos').doc(uid);
+    DocumentSnapshot snapshot = await docRef.get();
+
+    // Cek apakah user sudah absen untuk status ini di hari yang sama
+    if (snapshot.exists) {
+      final data = snapshot.data() as Map<String, dynamic>;
+      List<dynamic> images = data['imageUrls'] ?? [];
+
+      bool alreadySubmitted = images.any((img) {
+        final Timestamp timestamp = img['timestamp'];
+        final String status = img['statusCheckInCheckOut'] ?? '';
+        final date = timestamp.toDate();
+        String submittedDate = "${date.year}-${date.month}-${date.day}";
+
+        return submittedDate == today &&
+            status == widget.statusCheckInCheckOut;
+      });
+
+      if (alreadySubmitted) {
+         _showAbsensiSudahAdaDialog();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  'Anda sudah melakukan ${widget.statusCheckInCheckOut} hari ini.')),
+        );
+        return;
+      }
+    }
+
     // Upload ke Cloudinary
     String? imageUrl = await _uploadToCloudinary(_selectedFile!);
-    DateTime ntpTime = await NTP.now();
 
     if (imageUrl != null) {
-      DocumentReference docRef = _firestore.collection('photos').doc(uid);
-      DocumentSnapshot snapshot = await docRef.get();
-
       Map<String, dynamic> newImage = {
         'imageUrl': imageUrl,
         'status': 'pending',
@@ -123,12 +161,12 @@ class _UploadFilePageState extends State<UploadFilePage> {
 
       if (snapshot.exists) {
         await docRef.update({
-          'username': username, // ✅ update/overwrite username jika berubah
+          'username': username,
           'imageUrls': FieldValue.arrayUnion([newImage]),
         });
       } else {
         await docRef.set({
-          'username': username, // ✅ simpan username di luar image
+          'username': username,
           'imageUrls': [newImage],
         });
       }
@@ -149,7 +187,25 @@ class _UploadFilePageState extends State<UploadFilePage> {
   }
 }
 
-
+void _showAbsensiSudahAdaDialog() {
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: Text("Absensi Ditolak"),
+        content: Text("Anda sudah melakukan absensi ${widget.statusCheckInCheckOut} hari ini."),
+        actions: [
+          TextButton(
+            child: Text("OK"),
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+          ),
+        ],
+      );
+    },
+  );
+}
 
 
   @override
