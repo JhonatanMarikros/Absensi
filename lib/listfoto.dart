@@ -263,6 +263,152 @@ class _ListFotoPageState extends State<ListFotoPage> {
     }
   }
 
+  Future<void> _undoApproval(String uid, ImageData image) async {
+    try {
+      DocumentReference docRef = _firestore.collection('photos').doc(uid);
+      DocumentSnapshot snapshot = await docRef.get();
+
+      if (!snapshot.exists) return;
+
+      List<dynamic> imageUrls = List.from(snapshot['imageUrls'] ?? []);
+      final data = snapshot.data() as Map<String, dynamic>;
+
+      int dikurangHadir = 0;
+      int dikurangTelat = 0;
+      int dikurangWaktuTelat = 0;
+
+      for (var img in imageUrls) {
+        if (img['imageUrl'] == image['imageUrl']) {
+          if (img['status'] == 'Approved') {
+            final imgTimestamp =
+                (img['timestamp'] as Timestamp).toDate().toLocal();
+
+            if (img['statusCheckedIn'] == true ||
+                img['statusCheckedOut'] == true) {
+              if (img['statusCheckInCheckOut'] == 'Masuk') {
+                dikurangHadir = 1;
+                if (imgTimestamp.hour >= 8) {
+                  dikurangTelat = 1;
+                  dikurangWaktuTelat =
+                      ((imgTimestamp.hour - 8) * 60) + imgTimestamp.minute;
+                }
+              } else if (img['statusCheckInCheckOut'] == 'Keluar') {
+                // Cari pasangan masuk di tanggal yang sama
+                for (var otherImg in imageUrls) {
+                  if (otherImg['statusCheckInCheckOut'] == 'Masuk' &&
+                      (otherImg['timestamp'] as Timestamp)
+                              .toDate()
+                              .toLocal()
+                              .day ==
+                          imgTimestamp.day &&
+                      (otherImg['timestamp'] as Timestamp)
+                              .toDate()
+                              .toLocal()
+                              .month ==
+                          imgTimestamp.month &&
+                      (otherImg['timestamp'] as Timestamp)
+                              .toDate()
+                              .toLocal()
+                              .year ==
+                          imgTimestamp.year &&
+                      otherImg['statusCheckedIn'] == true) {
+                    // Jika pasangan ditemukan, kurangi statistik
+                    dikurangHadir = 1;
+                    if ((otherImg['timestamp'] as Timestamp)
+                            .toDate()
+                            .toLocal()
+                            .hour >=
+                        8) {
+                      dikurangTelat = 1;
+                      dikurangWaktuTelat =
+                          (((otherImg['timestamp'] as Timestamp)
+                                          .toDate()
+                                          .toLocal()
+                                          .hour -
+                                      8) *
+                                  60) +
+                              ((otherImg['timestamp'] as Timestamp)
+                                  .toDate()
+                                  .toLocal()
+                                  .minute);
+                    }
+
+                    // Reset pasangan
+                    otherImg.remove('statusCheckedIn');
+                    otherImg.remove('statusCheckedOut');
+                    break;
+                  }
+                }
+              }
+
+              // Reset pasangan di tanggal yang sama
+              for (var otherImg in imageUrls) {
+                if (otherImg['imageUrl'] != img['imageUrl'] &&
+                    (otherImg['timestamp'] as Timestamp)
+                            .toDate()
+                            .toLocal()
+                            .day ==
+                        imgTimestamp.day &&
+                    (otherImg['timestamp'] as Timestamp)
+                            .toDate()
+                            .toLocal()
+                            .month ==
+                        imgTimestamp.month &&
+                    (otherImg['timestamp'] as Timestamp)
+                            .toDate()
+                            .toLocal()
+                            .year ==
+                        imgTimestamp.year) {
+                  otherImg.remove('statusCheckedIn');
+                  otherImg.remove('statusCheckedOut');
+                }
+              }
+
+              // Reset status sendiri
+              if (img['statusCheckInCheckOut'] == 'Masuk') {
+                img.remove('statusCheckedIn');
+              } else if (img['statusCheckInCheckOut'] == 'Keluar') {
+                img.remove('statusCheckedOut');
+              }
+            }
+
+            img['status'] = 'pending';
+          }
+        }
+      }
+
+      // Kurangi statistik
+      Map<String, dynamic> stats = data['statistics'] ??
+          {
+            'hadir': 0,
+            'totalTelat': 0,
+            'waktuTelat': 0,
+          };
+
+      stats['hadir'] =
+          (stats['hadir'] - dikurangHadir).clamp(0, double.infinity);
+      stats['totalTelat'] =
+          (stats['totalTelat'] - dikurangTelat).clamp(0, double.infinity);
+      stats['waktuTelat'] =
+          (stats['waktuTelat'] - dikurangWaktuTelat).clamp(0, double.infinity);
+
+      await docRef.update({
+        'imageUrls': imageUrls,
+        'statistics': stats,
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content:
+                Text("Status foto berhasil di-undo dan statistik dikoreksi")),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error saat undo: ${e.toString()}")),
+      );
+    }
+  }
+
   Widget _buildStatBox(String label, String value) {
     return Expanded(
       child: Column(
@@ -373,6 +519,25 @@ class _ListFotoPageState extends State<ListFotoPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Align(
+                        alignment: Alignment.topRight,
+                        child: PopupMenuButton<String>(
+                          onSelected: (value) {
+                            if (value == 'undo') {
+                              _undoApproval(widget.uid, image);
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            if (image['status'] == 'Approved' &&
+                                (image['statusCheckedIn'] == true ||
+                                    image['statusCheckedOut'] == true))
+                              const PopupMenuItem(
+                                value: 'undo',
+                                child: Text('Undo Approved'),
+                              ),
+                          ],
+                        ),
+                      ),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
                         child: Image.network(
