@@ -1,3 +1,4 @@
+import 'package:absensi/salaryUser.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -18,13 +19,16 @@ class _HomeMainState extends State<HomeMain> {
   void initState() {
     super.initState();
     _getUserData();
-    _getLatestSlipGaji();
   }
 
   void _getUserData() async {
     User? user = _auth.currentUser;
     if (user != null) {
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
       if (userDoc.exists) {
         setState(() {
           username = userDoc['username'] ?? "";
@@ -32,112 +36,21 @@ class _HomeMainState extends State<HomeMain> {
           profileUrl = userDoc['profile'] ?? "";
         });
       }
-    }
-  }
 
-  void _getLatestSlipGaji() async {
-    User? user = _auth.currentUser;
-    if (user != null) {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('slip_gaji')
-          .doc(user.uid)
-          .collection('data')
-          .orderBy('tahun', descending: true)
-          .orderBy('bulan', descending: true)
+      // Ambil slip gaji terbaru
+      final slipQuery = await FirebaseFirestore.instance
+          .collection('salary')
+          .where('uid', isEqualTo: user.uid)
+          .orderBy('timestamp', descending: true)
           .limit(1)
           .get();
 
-      if (snapshot.docs.isNotEmpty) {
+      if (slipQuery.docs.isNotEmpty) {
         setState(() {
-          latestSlip = snapshot.docs.first.data();
+          latestSlip = slipQuery.docs.first.data();
         });
       }
     }
-  }
-
-  Widget buildSlipGajiCard() {
-    if (latestSlip == null) {
-      return Card(
-        margin: EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            children: [
-              Icon(Icons.receipt_long, size: 36, color: Colors.indigo[700]),
-              SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  "Slip gaji belum tersedia.",
-                  style: TextStyle(fontSize: 16, color: Colors.grey[700]),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Card(
-      margin: EdgeInsets.all(16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Slip Gaji Terbaru",
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.indigo[800],
-              ),
-            ),
-            SizedBox(height: 8),
-            Text("${latestSlip!['bulan']} ${latestSlip!['tahun']}", style: TextStyle(fontSize: 16)),
-            SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text("Gaji Pokok", style: TextStyle(color: Colors.grey[700])),
-                Text("Rp${latestSlip!['gaji_pokok'].toString()}", style: TextStyle(fontWeight: FontWeight.w500)),
-              ],
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text("Bonus", style: TextStyle(color: Colors.grey[700])),
-                Text("Rp${latestSlip!['bonus'].toString()}", style: TextStyle(fontWeight: FontWeight.w500)),
-              ],
-            ),
-            Divider(),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text("Total", style: TextStyle(fontWeight: FontWeight.bold)),
-                Text(
-                  "Rp${latestSlip!['total'].toString()}",
-                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo[900]),
-                ),
-              ],
-            ),
-            SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: () {
-                  // Arahkan ke halaman detail slip gaji jika ada
-                },
-                icon: Icon(Icons.arrow_forward, size: 18),
-                label: Text("Lihat Detail"),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
@@ -175,11 +88,32 @@ class _HomeMainState extends State<HomeMain> {
           SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(position, style: TextStyle(fontSize: 16, color: Colors.grey[700])),
+            child: Text(position,
+                style: TextStyle(fontSize: 16, color: Colors.grey[700])),
           ),
           SizedBox(height: 16),
-          buildSlipGajiCard(),
-          // Tambah card lainnya di bawah sini jika perlu
+
+          // Tambahkan tombol untuk membuka halaman Slip Gaji User
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => SalaryUserPage(
+                        uid: FirebaseAuth.instance.currentUser!.uid),
+                  ),
+                );
+              },
+              child:
+                  Text("Lihat Slip Gaji", style: TextStyle(fontSize: 16)),
+              style: ElevatedButton.styleFrom(
+                primary: Colors.indigo[900], // Warna tombol
+                padding: EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
         ],
       ),
     );

@@ -15,27 +15,56 @@ class _AuthScreenState extends State<AuthScreen> {
   final TextEditingController _usernameController = TextEditingController();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
   bool isLogin = true;
+  bool _isLoading = false;
+  bool _obscurePassword = true;
   String? _selectedPosition;
   final List<String> _positions = ['Direktur', 'HRD', 'Karyawan', 'Harian', 'Sales'];
 
   void _authenticate() async {
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty || (!isLogin && _usernameController.text.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Mohon isi semua kolom yang diperlukan.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
     try {
-      UserCredential userCredential;
       if (isLogin) {
-        // Verifikasi pengguna dengan Login
-        userCredential = await _auth.signInWithEmailAndPassword(
-          email: _emailController.text,
-          password: _passwordController.text,
-        );
-      } else {
-        // Menambahkan data dengan Register
-        userCredential = await _auth.createUserWithEmailAndPassword(
+        // Login
+        UserCredential userCredential = await _auth.signInWithEmailAndPassword(
           email: _emailController.text,
           password: _passwordController.text,
         );
 
-        // Simpan data pengguna di Firestore Firebase
+        DocumentSnapshot userDoc = await _firestore
+            .collection('users')
+            .doc(userCredential.user!.uid)
+            .get();
+        String role = userDoc.exists ? userDoc['role'] : 'user';
+
+        if (role == 'admin') {
+          Navigator.pushReplacement(
+              context, MaterialPageRoute(builder: (context) => AdminHomePage()));
+        } else {
+          Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => MainPage(uid: userCredential.user!.uid)));
+        }
+      } else {
+        // Register
+        UserCredential userCredential =
+            await _auth.createUserWithEmailAndPassword(
+          email: _emailController.text,
+          password: _passwordController.text,
+        );
+
         await _firestore.collection('users').doc(userCredential.user!.uid).set({
           'uid': userCredential.user!.uid,
           'email': _emailController.text,
@@ -44,36 +73,57 @@ class _AuthScreenState extends State<AuthScreen> {
           'role': 'user',
           'position': _selectedPosition ?? '',
         });
+
+        await _auth.signOut();
+
+        setState(() {
+          isLogin = true;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Registrasi berhasil. Silakan login.')),
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      String message;
+      switch (e.code) {
+        case 'invalid-email':
+          message = 'Format email tidak valid.';
+          break;
+        case 'user-not-found':
+          message = 'Akun tidak ditemukan.';
+          break;
+        case 'wrong-password':
+          message = 'Password salah.';
+          break;
+        case 'email-already-in-use':
+          message = 'Email sudah digunakan.';
+          break;
+        case 'weak-password':
+          message = 'Password minimal 6 karakter.';
+          break;
+        default:
+          message = 'Terjadi kesalahan: ${e.message}';
       }
 
-      // Ambil role user dari Firestore
-      DocumentSnapshot userDoc = await _firestore
-          .collection('users')
-          .doc(userCredential.user!.uid)
-          .get();
-      String role = userDoc.exists ? userDoc['role'] : 'user';
-
-      // Arahkan berdasarkan role
-      if (role == 'admin') {
-        Navigator.pushReplacement(
-            context, MaterialPageRoute(builder: (context) => AdminHomePage()));
-      } else {
-        Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-                builder: (context) => MainPage(uid: userCredential.user!.uid)));
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
+        SnackBar(content: Text('Error: ${e.toString()}')),
       );
     }
+
+    setState(() {
+      _isLoading = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.blueGrey[50], // Warna background
+      backgroundColor: Colors.blueGrey[50],
       body: Center(
         child: SingleChildScrollView(
           child: Padding(
@@ -81,32 +131,22 @@ class _AuthScreenState extends State<AuthScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Tambahkan gambar/logo di atas form
-                Image.asset('assets/SBM.png',
-                    height: 150), // Pastikan file ini ada di assets
-
+                Image.asset('assets/SBM.png', height: 150),
                 SizedBox(height: 20),
-
                 Text(
                   isLogin ? 'Welcome Back!' : 'Create an Account',
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
                 SizedBox(height: 10),
-
                 Text(
                   isLogin ? 'Login to continue' : 'Sign up to get started',
                   style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                 ),
                 SizedBox(height: 30),
-
-                // Form Input
                 if (!isLogin)
-                  _buildTextField(
-                      _usernameController, "Username", Icons.person),
+                  _buildTextField(_usernameController, "Username", Icons.person),
                 _buildTextField(_emailController, "Email", Icons.email),
-                _buildTextField(_passwordController, "Password", Icons.lock,
-                    isPassword: true),
-                
+                _buildTextField(_passwordController, "Password", Icons.lock, isPassword: true),
                 if (!isLogin)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
@@ -134,28 +174,30 @@ class _AuthScreenState extends State<AuthScreen> {
                       },
                     ),
                   ),
-
                 SizedBox(height: 20),
-
-                // Tombol Login/Register
-                ElevatedButton(
-                  onPressed: _authenticate,
-                  style: ElevatedButton.styleFrom(
-                    padding: EdgeInsets.symmetric(vertical: 14),
-                    backgroundColor: Colors.blueAccent,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                    minimumSize: Size(double.infinity, 50),
-                  ),
-                  child: Text(
-                    isLogin ? 'Login' : 'Register',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                ),
-
+                _isLoading
+                    ? Column(
+                        children: [
+                          CircularProgressIndicator(),
+                          SizedBox(height: 10),
+                          Text(isLogin ? 'Proses login...' : 'Proses register...')
+                        ],
+                      )
+                    : ElevatedButton(
+                        onPressed: _authenticate,
+                        style: ElevatedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(vertical: 14),
+                          backgroundColor: Colors.blueAccent,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                          minimumSize: Size(double.infinity, 50),
+                        ),
+                        child: Text(
+                          isLogin ? 'Login' : 'Register',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
                 SizedBox(height: 20),
-
-                // Tombol Switch Login/Register
                 TextButton(
                   onPressed: () {
                     setState(() {
@@ -184,10 +226,23 @@ class _AuthScreenState extends State<AuthScreen> {
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: TextField(
         controller: controller,
-        obscureText: isPassword,
+        obscureText: isPassword ? _obscurePassword : false,
         decoration: InputDecoration(
           labelText: label,
           prefixIcon: Icon(icon, color: Colors.blueAccent),
+          suffixIcon: isPassword
+              ? IconButton(
+                  icon: Icon(
+                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                    color: Colors.grey,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _obscurePassword = !_obscurePassword;
+                    });
+                  },
+                )
+              : null,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
           ),

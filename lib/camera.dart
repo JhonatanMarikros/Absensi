@@ -22,6 +22,9 @@ class _CameraPageState extends State<CameraPage> {
   late List<CameraDescription> cameras;
   int selectedCameraIndex = 0;
   File? _capturedImage;
+  bool _isUploading = false;
+  bool _isCapturing = false;
+
   final String cloudinaryUrl =
       "https://api.cloudinary.com/v1_1/dxmczui47/image/upload";
   final String uploadPreset = "absensi";
@@ -65,100 +68,115 @@ class _CameraPageState extends State<CameraPage> {
 
   Future<void> _capturePhoto() async {
     try {
+      setState(() => _isCapturing = true);
+
       await _initializeControllerFuture;
       final image = await _controller.takePicture();
       setState(() {
         _capturedImage = File(image.path);
+        _isCapturing = false;
       });
     } catch (e) {
       print('Error: $e');
+      setState(() => _isCapturing = false);
     }
   }
 
   Future<void> _submitPhoto() async {
     if (_capturedImage == null) return;
 
-    User? user = _auth.currentUser;
-    if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('User not logged in!')),
-      );
-      return;
-    }
+    setState(() => _isUploading = true);
 
-    String uid = user.uid;
-
-    // Ambil username dari koleksi 'users'
-    DocumentSnapshot userSnapshot =
-        await _firestore.collection('users').doc(uid).get();
-    String username = '';
-    if (userSnapshot.exists && userSnapshot.data() != null) {
-      final data = userSnapshot.data() as Map<String, dynamic>;
-      username = data['username'] ?? '';
-    }
-
-    DateTime ntpTime = await NTP.now();
-    String today = "${ntpTime.year}-${ntpTime.month}-${ntpTime.day}";
-
-    DocumentReference docRef = _firestore.collection('photos').doc(uid);
-    DocumentSnapshot snapshot = await docRef.get();
-
-    // Cek apakah user sudah absen untuk status ini di hari yang sama
-    if (snapshot.exists) {
-      final data = snapshot.data() as Map<String, dynamic>;
-      List<dynamic> images = data['imageUrls'] ?? [];
-
-      bool alreadySubmitted = images.any((img) {
-        final Timestamp timestamp = img['timestamp'];
-        final String status = img['statusCheckInCheckOut'] ?? '';
-        final date = timestamp.toDate();
-        String submittedDate = "${date.year}-${date.month}-${date.day}";
-
-        return submittedDate == today && status == widget.statusCheckInCheckOut;
-      });
-
-      if (alreadySubmitted) {
-         _showAbsensiSudahAdaDialog();
+    try {
+      User? user = _auth.currentUser;
+      if (user == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(
-                  'You have already submitted ${widget.statusCheckInCheckOut} for today.')),
+          const SnackBar(content: Text('User not logged in!')),
         );
+        setState(() => _isUploading = false);
         return;
       }
-    }
 
-    String? imageUrl = await _uploadToCloudinary(_capturedImage!);
+      String uid = user.uid;
 
-    if (imageUrl != null) {
-      Map<String, dynamic> newImage = {
-        'imageUrl': imageUrl,
-        'status': 'pending',
-        'timestamp': Timestamp.fromDate(ntpTime),
-        'statusCheckInCheckOut': widget.statusCheckInCheckOut,
-      };
-
-      if (snapshot.exists) {
-        await docRef.update({
-          'username': username,
-          'imageUrls': FieldValue.arrayUnion([newImage]),
-        });
-      } else {
-        await docRef.set({
-          'username': username,
-          'imageUrls': [newImage],
-        });
+      DocumentSnapshot userSnapshot =
+          await _firestore.collection('users').doc(uid).get();
+      String username = '';
+      if (userSnapshot.exists && userSnapshot.data() != null) {
+        final data = userSnapshot.data() as Map<String, dynamic>;
+        username = data['username'] ?? '';
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Photo uploaded successfully!')),
-      );
+      DateTime ntpTime = await NTP.now();
+      String today = "${ntpTime.year}-${ntpTime.month}-${ntpTime.day}";
 
-      setState(() {
-        _capturedImage = null;
-      });
+      DocumentReference docRef = _firestore.collection('photos').doc(uid);
+      DocumentSnapshot snapshot = await docRef.get();
 
-      Navigator.pop(context);
+      if (snapshot.exists) {
+        final data = snapshot.data() as Map<String, dynamic>;
+        List<dynamic> images = data['imageUrls'] ?? [];
+
+        bool alreadySubmitted = images.any((img) {
+          final Timestamp timestamp = img['timestamp'];
+          final String status = img['statusCheckInCheckOut'] ?? '';
+          final date = timestamp.toDate();
+          String submittedDate = "${date.year}-${date.month}-${date.day}";
+
+          return submittedDate == today &&
+              status == widget.statusCheckInCheckOut;
+        });
+
+        if (alreadySubmitted) {
+          _showAbsensiSudahAdaDialog();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text(
+                    'You have already submitted ${widget.statusCheckInCheckOut} for today.')),
+          );
+          setState(() => _isUploading = false);
+          return;
+        }
+      }
+
+      String? imageUrl = await _uploadToCloudinary(_capturedImage!);
+
+      if (imageUrl != null) {
+        Map<String, dynamic> newImage = {
+          'imageUrl': imageUrl,
+          'status': 'pending',
+          'timestamp': Timestamp.fromDate(ntpTime),
+          'statusCheckInCheckOut': widget.statusCheckInCheckOut,
+        };
+
+        if (snapshot.exists) {
+          await docRef.update({
+            'username': username,
+            'imageUrls': FieldValue.arrayUnion([newImage]),
+          });
+        } else {
+          await docRef.set({
+            'username': username,
+            'imageUrls': [newImage],
+          });
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Photo uploaded successfully!')),
+        );
+
+        setState(() {
+          _capturedImage = null;
+          _isUploading = false;
+        });
+
+        Navigator.pop(context);
+      } else {
+        setState(() => _isUploading = false);
+      }
+    } catch (e) {
+      print('Error during submission: $e');
+      setState(() => _isUploading = false);
     }
   }
 
@@ -181,25 +199,23 @@ class _CameraPageState extends State<CameraPage> {
   }
 
   void _showAbsensiSudahAdaDialog() {
-  showDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: Text("Absensi Ditolak"),
-        content: Text("Anda sudah melakukan absensi ${widget.statusCheckInCheckOut} hari ini."),
-        actions: [
-          TextButton(
-            child: Text("OK"),
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-          ),
-        ],
-      );
-    },
-  );
-}
-
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text("Absensi Ditolak"),
+          content: Text(
+              "Anda sudah melakukan absensi ${widget.statusCheckInCheckOut} hari ini."),
+          actions: [
+            TextButton(
+              child: Text("OK"),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   void dispose() {
@@ -226,65 +242,97 @@ class _CameraPageState extends State<CameraPage> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: _capturedImage == null
-                ? FutureBuilder<void>(
-                    future: _initializeControllerFuture,
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.done) {
-                        return CameraPreview(_controller);
-                      } else {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                    },
-                  )
-                : Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.file(_capturedImage!, fit: BoxFit.cover),
+      body: _isUploading
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text(
+                    'Mengunggah absensi...',
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                ],
+              ),
+            )
+          : _isCapturing
+              ? const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text(
+                        'Proses Capture Photo...',
+                        style: TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                    ],
+                  ),
+                )
+              : Column(
+                  children: [
+                    Expanded(
+                      child: _capturedImage == null
+                          ? FutureBuilder<void>(
+                              future: _initializeControllerFuture,
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState ==
+                                    ConnectionState.done) {
+                                  return CameraPreview(_controller);
+                                } else {
+                                  return const Center(
+                                      child: CircularProgressIndicator());
+                                }
+                              },
+                            )
+                          : Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.file(_capturedImage!,
+                                    fit: BoxFit.cover),
+                              ),
+                            ),
                     ),
-                  ),
-          ),
-          if (_capturedImage != null)
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: ElevatedButton(
-                onPressed: _submitPhoto,
-                style: ElevatedButton.styleFrom(
-                  primary: Colors.green,
-                  padding: EdgeInsets.symmetric(vertical: 15),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                    if (_capturedImage != null)
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: ElevatedButton(
+                          onPressed: _submitPhoto,
+                          style: ElevatedButton.styleFrom(
+                            primary: Colors.green,
+                            padding: EdgeInsets.symmetric(vertical: 15),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: Text(
+                            'Submit Photo',
+                            style:
+                                TextStyle(fontSize: 18, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: ElevatedButton(
+                        onPressed: _capturePhoto,
+                        style: ElevatedButton.styleFrom(
+                          primary: Colors.indigo[900],
+                          padding: EdgeInsets.symmetric(vertical: 15),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: Text(
+                          'Capture Photo',
+                          style: TextStyle(fontSize: 18, color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                child: Text(
-                  'Submit Photo',
-                  style: TextStyle(fontSize: 18, color: Colors.white),
-                ),
-              ),
-            ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: ElevatedButton(
-              onPressed: _capturePhoto,
-              style: ElevatedButton.styleFrom(
-                primary: Colors.indigo[900],
-                padding: EdgeInsets.symmetric(vertical: 15),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              child: Text(
-                'Capture Photo',
-                style: TextStyle(fontSize: 18, color: Colors.white),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

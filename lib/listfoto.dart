@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'salary.dart';
 
 typedef ImageData = Map<String, dynamic>;
 
@@ -497,6 +498,30 @@ class _ListFotoPageState extends State<ListFotoPage> {
                                 backgroundColor: Colors.redAccent),
                           ),
                         ),
+                        // Tombol untuk upload slip gaji
+                        const SizedBox(height: 20),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              // Navigasi ke halaman salary.dart untuk upload foto slip gaji
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => SalaryPage(
+                                    uid: widget.uid,
+                                    username: widget.username,
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.upload),
+                            label: const Text("Upload Slip Gaji"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -564,7 +589,7 @@ class _ListFotoPageState extends State<ListFotoPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
                           if (!(image['statusCheckedIn'] == true ||
-                              image['statusCheckedOut'] == true)) ...[
+                              image['statusCheckedOut'] == true)) ...[ 
                             ElevatedButton.icon(
                               onPressed: () =>
                                   _updateStatus(widget.uid, image, "Approved"),

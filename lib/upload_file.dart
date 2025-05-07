@@ -5,7 +5,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-
 import 'package:ntp/ntp.dart';
 
 class UploadFilePage extends StatefulWidget {
@@ -17,9 +16,10 @@ class UploadFilePage extends StatefulWidget {
   _UploadFilePageState createState() => _UploadFilePageState();
 }
 
-
 class _UploadFilePageState extends State<UploadFilePage> {
   File? _selectedFile;
+  bool _isSubmitting = false;
+
   final String cloudinaryUrl =
       "https://api.cloudinary.com/v1_1/dxmczui47/image/upload";
   final String uploadPreset = "absensi";
@@ -29,7 +29,8 @@ class _UploadFilePageState extends State<UploadFilePage> {
 
   void _pickFile(BuildContext context, FileType fileType) async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(type: fileType);
+      FilePickerResult? result =
+          await FilePicker.platform.pickFiles(type: fileType);
       if (result != null && result.files.single.path != null) {
         setState(() {
           _selectedFile = File(result.files.single.path!);
@@ -44,7 +45,6 @@ class _UploadFilePageState extends State<UploadFilePage> {
       );
     }
   }
-
 
   void _showFilePickerOptions(BuildContext context) {
     showDialog(
@@ -96,117 +96,131 @@ class _UploadFilePageState extends State<UploadFilePage> {
   }
 
   void _submitFile() async {
-  if (_selectedFile != null) {
-    User? user = _auth.currentUser;
-    if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Anda harus login terlebih dahulu!')),
-      );
-      return;
-    }
-
-    String uid = user.uid;
-
-    // Ambil username dari Firestore
-    DocumentSnapshot userSnapshot =
-        await _firestore.collection('users').doc(uid).get();
-    String username = '';
-    if (userSnapshot.exists && userSnapshot.data() != null) {
-      final data = userSnapshot.data() as Map<String, dynamic>;
-      username = data['username'] ?? '';
-    }
-
-    DateTime ntpTime = await NTP.now();
-    String today = "${ntpTime.year}-${ntpTime.month}-${ntpTime.day}";
-
-    DocumentReference docRef = _firestore.collection('photos').doc(uid);
-    DocumentSnapshot snapshot = await docRef.get();
-
-    // Cek apakah user sudah absen untuk status ini di hari yang sama
-    if (snapshot.exists) {
-      final data = snapshot.data() as Map<String, dynamic>;
-      List<dynamic> images = data['imageUrls'] ?? [];
-
-      bool alreadySubmitted = images.any((img) {
-        final Timestamp timestamp = img['timestamp'];
-        final String status = img['statusCheckInCheckOut'] ?? '';
-        final date = timestamp.toDate();
-        String submittedDate = "${date.year}-${date.month}-${date.day}";
-
-        return submittedDate == today &&
-            status == widget.statusCheckInCheckOut;
+    if (_selectedFile != null) {
+      setState(() {
+        _isSubmitting = true;
       });
 
-      if (alreadySubmitted) {
-         _showAbsensiSudahAdaDialog();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(
-                  'Anda sudah melakukan ${widget.statusCheckInCheckOut} hari ini.')),
-        );
-        return;
-      }
-    }
+      try {
+        User? user = _auth.currentUser;
+        if (user == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Anda harus login terlebih dahulu!')),
+          );
+          return;
+        }
 
-    // Upload ke Cloudinary
-    String? imageUrl = await _uploadToCloudinary(_selectedFile!);
+        String uid = user.uid;
 
-    if (imageUrl != null) {
-      Map<String, dynamic> newImage = {
-        'imageUrl': imageUrl,
-        'status': 'pending',
-        'timestamp': Timestamp.fromDate(ntpTime),
-        'statusCheckInCheckOut': widget.statusCheckInCheckOut,
-      };
+        // Ambil username dari Firestore
+        DocumentSnapshot userSnapshot =
+            await _firestore.collection('users').doc(uid).get();
+        String username = '';
+        if (userSnapshot.exists && userSnapshot.data() != null) {
+          final data = userSnapshot.data() as Map<String, dynamic>;
+          username = data['username'] ?? '';
+        }
 
-      if (snapshot.exists) {
-        await docRef.update({
-          'username': username,
-          'imageUrls': FieldValue.arrayUnion([newImage]),
+        DateTime ntpTime = await NTP.now();
+        String today = "${ntpTime.year}-${ntpTime.month}-${ntpTime.day}";
+
+        DocumentReference docRef = _firestore.collection('photos').doc(uid);
+        DocumentSnapshot snapshot = await docRef.get();
+
+        // Cek apakah user sudah absen untuk status ini di hari yang sama
+        if (snapshot.exists) {
+          final data = snapshot.data() as Map<String, dynamic>;
+          List<dynamic> images = data['imageUrls'] ?? [];
+
+          bool alreadySubmitted = images.any((img) {
+            final Timestamp timestamp = img['timestamp'];
+            final String status = img['statusCheckInCheckOut'] ?? '';
+            final date = timestamp.toDate();
+            String submittedDate =
+                "${date.year}-${date.month}-${date.day}";
+
+            return submittedDate == today &&
+                status == widget.statusCheckInCheckOut;
+          });
+
+          if (alreadySubmitted) {
+            _showAbsensiSudahAdaDialog();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                    'Anda sudah melakukan ${widget.statusCheckInCheckOut} hari ini.'),
+              ),
+            );
+            return;
+          }
+        }
+
+        // Upload ke Cloudinary
+        String? imageUrl = await _uploadToCloudinary(_selectedFile!);
+
+        if (imageUrl != null) {
+          Map<String, dynamic> newImage = {
+            'imageUrl': imageUrl,
+            'status': 'pending',
+            'timestamp': Timestamp.fromDate(ntpTime),
+            'statusCheckInCheckOut': widget.statusCheckInCheckOut,
+          };
+
+          if (snapshot.exists) {
+            await docRef.update({
+              'username': username,
+              'imageUrls': FieldValue.arrayUnion([newImage]),
+            });
+          } else {
+            await docRef.set({
+              'username': username,
+              'imageUrls': [newImage],
+            });
+          }
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content:
+                    Text('File berhasil diunggah dan disimpan ke database!')),
+          );
+          Navigator.pop(context);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Gagal mengunggah file!')),
+          );
+        }
+      } finally {
+        setState(() {
+          _isSubmitting = false;
         });
-      } else {
-        await docRef.set({
-          'username': username,
-          'imageUrls': [newImage],
-        });
       }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('File berhasil diunggah dan disimpan ke database!')),
-      );
-      Navigator.pop(context);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal mengunggah file!')),
+        SnackBar(content: Text('Pilih file terlebih dahulu!')),
       );
     }
-  } else {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Pilih file terlebih dahulu!')),
+  }
+
+  void _showAbsensiSudahAdaDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text("Absensi Ditolak"),
+          content: Text(
+              "Anda sudah melakukan absensi ${widget.statusCheckInCheckOut} hari ini."),
+          actions: [
+            TextButton(
+              child: Text("OK"),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
     );
   }
-}
-
-void _showAbsensiSudahAdaDialog() {
-  showDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: Text("Absensi Ditolak"),
-        content: Text("Anda sudah melakukan absensi ${widget.statusCheckInCheckOut} hari ini."),
-        actions: [
-          TextButton(
-            child: Text("OK"),
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-          ),
-        ],
-      );
-    },
-  );
-}
-
 
   @override
   Widget build(BuildContext context) {
@@ -217,18 +231,26 @@ void _showAbsensiSudahAdaDialog() {
           mainAxisSize: MainAxisSize.min,
           children: [
             ElevatedButton(
-              onPressed: () => _showFilePickerOptions(context),
+              onPressed: _isSubmitting
+                  ? null
+                  : () => _showFilePickerOptions(context),
               child: Text('Pilih File'),
             ),
-            if (_selectedFile != null) ...[
+            if (_selectedFile != null && !_isSubmitting) ...[
               SizedBox(height: 16),
               Image.file(_selectedFile!,
                   width: 200, height: 200, fit: BoxFit.cover),
               SizedBox(height: 16),
               ElevatedButton(
-                onPressed: _submitFile,
+                onPressed: _isSubmitting ? null : _submitFile,
                 child: Text('Submit'),
               ),
+            ],
+            if (_isSubmitting) ...[
+              SizedBox(height: 20),
+              CircularProgressIndicator(),
+              SizedBox(height: 10),
+              Text('Proses submit foto...'),
             ],
           ],
         ),
