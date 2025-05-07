@@ -136,8 +136,7 @@ class _UploadFilePageState extends State<UploadFilePage> {
             final Timestamp timestamp = img['timestamp'];
             final String status = img['statusCheckInCheckOut'] ?? '';
             final date = timestamp.toDate();
-            String submittedDate =
-                "${date.year}-${date.month}-${date.day}";
+            String submittedDate = "${date.year}-${date.month}-${date.day}";
 
             return submittedDate == today &&
                 status == widget.statusCheckInCheckOut;
@@ -222,37 +221,131 @@ class _UploadFilePageState extends State<UploadFilePage> {
     );
   }
 
-  @override
+@override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Upload File')),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ElevatedButton(
-              onPressed: _isSubmitting
-                  ? null
-                  : () => _showFilePickerOptions(context),
-              child: Text('Pilih File'),
+      backgroundColor: Colors.grey[900],
+      appBar: AppBar(
+        backgroundColor: Colors.indigo[900],
+        title: Text(
+          'Upload Attendance File',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+        ),
+        centerTitle: true,
+        elevation: 4,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Center(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_selectedFile == null) ...[
+                  Icon(Icons.cloud_upload, size: 80, color: Colors.white70),
+                  SizedBox(height: 12),
+                  Text(
+                    'Silakan unggah foto atau dokumen\nuntuk keperluan absensi',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white70, fontSize: 16),
+                  ),
+                  SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed:
+                        _isSubmitting ? null : () => _showFilePickerOptions(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.indigo[900],
+                      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: Text(
+                      'Pilih File',
+                      style: TextStyle(fontSize: 18, color: Colors.white),
+                    ),
+                  ),
+                ] else ...[
+                  Container(
+                    constraints: BoxConstraints(maxHeight: 300),
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: _selectedFile!.path.endsWith('.jpg') ||
+                              _selectedFile!.path.endsWith('.jpeg') ||
+                              _selectedFile!.path.endsWith('.png')
+                          ? Image.file(_selectedFile!, fit: BoxFit.cover)
+                          : Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.insert_drive_file,
+                                        color: Colors.white70, size: 50),
+                                    SizedBox(height: 10),
+                                    Text(
+                                      _selectedFile!.path.split('/').last,
+                                      style: TextStyle(
+                                          color: Colors.white70, fontSize: 16),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: _isSubmitting
+                        ? null
+                        : () => _showFilePickerOptions(context),
+                    icon: Icon(Icons.refresh),
+                    label: Text("Ganti File"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  if (!_isSubmitting)
+                    ElevatedButton(
+                      onPressed: _submitFile,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        padding: EdgeInsets.symmetric(vertical: 15),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: Text(
+                        'Submit File',
+                        style: TextStyle(fontSize: 18, color: Colors.white),
+                      ),
+                    ),
+                  if (_isSubmitting) ...[
+                    SizedBox(height: 16),
+                    CircularProgressIndicator(color: Colors.white),
+                    SizedBox(height: 10),
+                    Text(
+                      'Proses submit file...',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                  ],
+                ]
+              ],
             ),
-            if (_selectedFile != null && !_isSubmitting) ...[
-              SizedBox(height: 16),
-              Image.file(_selectedFile!,
-                  width: 200, height: 200, fit: BoxFit.cover),
-              SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _isSubmitting ? null : _submitFile,
-                child: Text('Submit'),
-              ),
-            ],
-            if (_isSubmitting) ...[
-              SizedBox(height: 20),
-              CircularProgressIndicator(),
-              SizedBox(height: 10),
-              Text('Proses submit foto...'),
-            ],
-          ],
+          ),
         ),
       ),
     );
