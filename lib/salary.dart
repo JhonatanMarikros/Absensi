@@ -43,7 +43,8 @@ class _SalaryPageState extends State<SalaryPage> {
         final filePath = file.path;
         if (filePath == null) continue;
 
-        final uri = Uri.parse('https://api.cloudinary.com/v1_1/dxmczui47/image/upload');
+        final uri =
+            Uri.parse('https://api.cloudinary.com/v1_1/dxmczui47/image/upload');
         final request = http.MultipartRequest('POST', uri)
           ..fields['upload_preset'] = 'salary'
           ..files.add(await http.MultipartFile.fromPath('file', filePath));
@@ -73,7 +74,8 @@ class _SalaryPageState extends State<SalaryPage> {
         }, SetOptions(merge: true));
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Slip gaji berhasil diunggah untuk $username')),
+          SnackBar(
+              content: Text('Slip gaji berhasil diunggah untuk $username')),
         );
       } else {
         print('Tidak ada gambar yang berhasil diupload');
@@ -109,7 +111,8 @@ class _SalaryPageState extends State<SalaryPage> {
               children: [
                 const SizedBox(height: 20),
                 ElevatedButton(
-                  onPressed: () => uploadSlipGajiToCloudinary(widget.uid, widget.username),
+                  onPressed: () =>
+                      uploadSlipGajiToCloudinary(widget.uid, widget.username),
                   child: const Text("Upload Slip Gaji"),
                 ),
                 const SizedBox(height: 20),
@@ -125,7 +128,8 @@ class _SalaryPageState extends State<SalaryPage> {
                       }
 
                       if (!snapshot.hasData || !snapshot.data!.exists) {
-                        return const Center(child: Text('Belum ada slip gaji diunggah.'));
+                        return const Center(
+                            child: Text('Belum ada slip gaji diunggah.'));
                       }
 
                       final data = snapshot.data!;
@@ -134,7 +138,8 @@ class _SalaryPageState extends State<SalaryPage> {
                       );
 
                       if (salaryImagesData.isEmpty) {
-                        return const Center(child: Text('Tidak ada gambar yang diunggah.'));
+                        return const Center(
+                            child: Text('Tidak ada gambar yang diunggah.'));
                       }
 
                       return SingleChildScrollView(
@@ -157,13 +162,43 @@ class _SalaryPageState extends State<SalaryPage> {
 
                             return Padding(
                               padding: const EdgeInsets.all(8.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Image.network(imageUrl),
-                                  const SizedBox(height: 5),
-                                  Text('Diupload pada: $formattedTime'),
-                                ],
+                              child: Card(
+                                elevation: 3,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Image.network(imageUrl),
+                                    Padding(
+                                      padding: const EdgeInsets.all(8.0),
+                                      child:
+                                          Text('Diupload pada: $formattedTime'),
+                                    ),
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: IconButton(
+                                        icon: const Icon(Icons.delete,
+                                            color: Colors.red),
+                                        onPressed: () async {
+                                          await FirebaseFirestore.instance
+                                              .collection('salary')
+                                              .doc(widget.uid)
+                                              .update({
+                                            'salary_images':
+                                                FieldValue.arrayRemove(
+                                                    [imageData]),
+                                          });
+
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            const SnackBar(
+                                                content: Text(
+                                                    'Gambar berhasil dihapus')),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             );
                           }).toList(),

@@ -21,7 +21,8 @@ class _MePageState extends State<MePage> {
   bool isEditing = false;
   String uid = "";
   File? _selectedImage;
-  final String cloudinaryUrl = "https://api.cloudinary.com/v1_1/dxmczui47/image/upload";
+  final String cloudinaryUrl =
+      "https://api.cloudinary.com/v1_1/dxmczui47/image/upload";
   final String uploadPreset = "absensi";
 
   int hadir = 0;
@@ -37,7 +38,8 @@ class _MePageState extends State<MePage> {
   void _loadUserData() async {
     User? user = _auth.currentUser;
     if (user != null) {
-      DocumentSnapshot userDoc = await _firestore.collection('users').doc(user.uid).get();
+      DocumentSnapshot userDoc =
+          await _firestore.collection('users').doc(user.uid).get();
       if (userDoc.exists) {
         setState(() {
           uid = user.uid;
@@ -51,13 +53,19 @@ class _MePageState extends State<MePage> {
   }
 
   void _fetchAttendanceData() async {
-    DocumentSnapshot userDoc = await _firestore.collection('photos').doc(uid).get();
+    DocumentSnapshot userDoc =
+        await _firestore.collection('photos').doc(uid).get();
     if (userDoc.exists) {
-      setState(() {
-        hadir = userDoc['hadir'] ?? 0;
-        totalTelat = userDoc['totalTelat'] ?? 0;
-        waktuTelat = userDoc['waktuTelat'] ?? 0;
-      });
+      Map<String, dynamic>? data = userDoc.data() as Map<String, dynamic>?;
+      if (data != null && data.containsKey('statistics')) {
+        Map<String, dynamic> stats =
+            Map<String, dynamic>.from(data['statistics']);
+        setState(() {
+          hadir = stats['hadir'] ?? 0;
+          totalTelat = stats['totalTelat'] ?? 0;
+          waktuTelat = stats['waktuTelat'] ?? 0;
+        });
+      }
     }
   }
 
@@ -104,14 +112,18 @@ class _MePageState extends State<MePage> {
     try {
       var request = http.MultipartRequest('POST', Uri.parse(cloudinaryUrl));
       request.fields['upload_preset'] = uploadPreset;
-      request.files.add(await http.MultipartFile.fromPath('file', _selectedImage!.path));
+      request.files
+          .add(await http.MultipartFile.fromPath('file', _selectedImage!.path));
       var response = await request.send();
       var responseData = await response.stream.bytesToString();
       var jsonData = json.decode(responseData);
       String? imageUrl = jsonData['secure_url'];
 
       if (imageUrl != null) {
-        await _firestore.collection('users').doc(uid).update({'profile': imageUrl});
+        await _firestore
+            .collection('users')
+            .doc(uid)
+            .update({'profile': imageUrl});
         setState(() {
           profileImage = imageUrl;
           _selectedImage = null;
@@ -200,7 +212,8 @@ class _MePageState extends State<MePage> {
                     ? FileImage(_selectedImage!)
                     : profileImage.isNotEmpty
                         ? NetworkImage(profileImage)
-                        : AssetImage("assets/default_profile.png") as ImageProvider,
+                        : AssetImage("assets/default_profile.png")
+                            as ImageProvider,
               ),
             ),
             SizedBox(height: 10),
@@ -232,39 +245,75 @@ class _MePageState extends State<MePage> {
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.indigo[900],
-                      padding: EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 15, vertical: 8),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
                     child: Text(
                       "Edit Username",
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold),
                     ),
                   ),
             SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _buildAttendanceBox("Hadir", "$hadir", Colors.green),
-                _buildAttendanceBox("Total Telat", "$totalTelat hari", Colors.red),
-                _buildAttendanceBox("Waktu Telat", "$waktuTelat menit", Colors.orange),
-              ],
-            ),
+            uid.isNotEmpty
+                ? StreamBuilder<DocumentSnapshot>(
+                    stream:
+                        _firestore.collection('photos').doc(uid).snapshots(),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData || !snapshot.data!.exists) {
+                        return Center(child: Text("Statistik tidak tersedia"));
+                      }
+
+                      Map<String, dynamic>? data =
+                          snapshot.data!.data() as Map<String, dynamic>?;
+
+                      if (data == null || !data.containsKey('statistics')) {
+                        return Center(
+                            child: Text("Data statistik belum tersedia"));
+                      }
+
+                      Map<String, dynamic> stats =
+                          Map<String, dynamic>.from(data['statistics']);
+                      int hadirRealtime = stats['hadir'] ?? 0;
+                      int totalTelatRealtime = stats['totalTelat'] ?? 0;
+                      int waktuTelatRealtime = stats['waktuTelat'] ?? 0;
+
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _buildAttendanceBox(
+                              "Hadir", "$hadirRealtime", Colors.green),
+                          _buildAttendanceBox("Total Telat",
+                              "$totalTelatRealtime hari", Colors.red),
+                          _buildAttendanceBox("Waktu Telat",
+                              "$waktuTelatRealtime menit", Colors.orange),
+                        ],
+                      );
+                    },
+                  )
+                : CircularProgressIndicator(),
             SizedBox(height: 20),
             Expanded(
               child: uid.isNotEmpty
                   ? StreamBuilder<DocumentSnapshot>(
-                      stream: _firestore.collection('photos').doc(uid).snapshots(),
+                      stream:
+                          _firestore.collection('photos').doc(uid).snapshots(),
                       builder: (context, snapshot) {
                         if (!snapshot.hasData || !snapshot.data!.exists) {
-                          return Center(child: Text("Tidak ada foto yang tersedia"));
+                          return Center(
+                              child: Text("Tidak ada foto yang tersedia"));
                         }
-                        Map<String, dynamic>? data = snapshot.data!.data() as Map<String, dynamic>?;
+                        Map<String, dynamic>? data =
+                            snapshot.data!.data() as Map<String, dynamic>?;
                         if (data == null || !data.containsKey('imageUrls')) {
-                          return Center(child: Text("Tidak ada foto yang tersedia"));
+                          return Center(
+                              child: Text("Tidak ada foto yang tersedia"));
                         }
-                        List<Map<String, dynamic>> imageUrls = List<Map<String, dynamic>>.from(data['imageUrls']);
+                        List<Map<String, dynamic>> imageUrls =
+                            List<Map<String, dynamic>>.from(data['imageUrls']);
                         return ListView(
                           children: imageUrls.map((image) {
                             var timestamp = image['timestamp']?.toDate();
@@ -277,12 +326,19 @@ class _MePageState extends State<MePage> {
                                 children: [
                                   Image.network(image['imageUrl']),
                                   SizedBox(height: 5),
-                                  Text('Status: ${image['status']}', style: const TextStyle(fontWeight: FontWeight.w500)),
+                                  Text('Status: ${image['status']}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w500)),
                                   const SizedBox(height: 4),
-                                  Text('Check-In/Out: ${image['statusCheckInCheckOut'] ?? 'Tidak diketahui'}',
-                                      style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.black54)),
+                                  Text(
+                                      'Check-In/Out: ${image['statusCheckInCheckOut'] ?? 'Tidak diketahui'}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                          color: Colors.black54)),
                                   const SizedBox(height: 4),
-                                  Text('Waktu: $formattedTimestamp', style: const TextStyle(color: Colors.grey)),
+                                  Text('Waktu: $formattedTimestamp',
+                                      style:
+                                          const TextStyle(color: Colors.grey)),
                                   const SizedBox(height: 8),
                                 ],
                               ),
@@ -311,9 +367,12 @@ class _MePageState extends State<MePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+          Text(title,
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
           SizedBox(height: 5),
-          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 18, fontWeight: FontWeight.bold, color: color)),
         ],
       ),
     );
