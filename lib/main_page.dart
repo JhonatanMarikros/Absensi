@@ -51,12 +51,14 @@ class _MainPageState extends State<MainPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(90.0),
         child: AppBar(
           backgroundColor: const Color.fromARGB(255, 0, 0, 0),
           flexibleSpace: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
             child: StreamBuilder<DocumentSnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('users')
@@ -109,7 +111,8 @@ class _MainPageState extends State<MainPage> {
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 10.0),
                         child: IconButton(
-                          icon: const Icon(Icons.logout, color: Color.fromARGB(255, 159, 16, 16)),
+                          icon: const Icon(Icons.logout,
+                              color: Color.fromARGB(255, 159, 16, 16)),
                           onPressed: () => _logout(context),
                         ),
                       ),
@@ -131,7 +134,8 @@ class _MainPageState extends State<MainPage> {
             _selectedIndex = 1; // pindah ke Absensi
           });
         },
-        child: Icon(Icons.check_circle, size: 30), // Ganti dengan icon absensi/QRIS
+        child: Icon(Icons.check_circle,
+            size: 30), // Ganti dengan icon absensi/QRIS
       ),
       bottomNavigationBar: ClipRRect(
         borderRadius: const BorderRadius.only(
@@ -146,7 +150,8 @@ class _MainPageState extends State<MainPage> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               IconButton(
-                icon: Icon(Icons.home, color: _selectedIndex == 0 ? Colors.white : Colors.grey),
+                icon: Icon(Icons.home,
+                    color: _selectedIndex == 0 ? Colors.white : Colors.grey),
                 onPressed: () {
                   setState(() {
                     _selectedIndex = 0;
@@ -155,7 +160,8 @@ class _MainPageState extends State<MainPage> {
               ),
               SizedBox(width: 40), // ruang untuk FAB
               IconButton(
-                icon: Icon(Icons.person, color: _selectedIndex == 2 ? Colors.white : Colors.grey),
+                icon: Icon(Icons.person,
+                    color: _selectedIndex == 2 ? Colors.white : Colors.grey),
                 onPressed: () {
                   setState(() {
                     _selectedIndex = 2;

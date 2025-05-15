@@ -480,17 +480,17 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                         vertical: 10),
                                     elevation: 3,
                                     shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(12)),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
                                     child: Column(
                                       children: [
                                         ListTile(
                                           leading:
-                                              FutureBuilder<DocumentSnapshot>(
-                                            future: _firestore
+                                              StreamBuilder<DocumentSnapshot>(
+                                            stream: _firestore
                                                 .collection('users')
                                                 .doc(uid)
-                                                .get(),
+                                                .snapshots(),
                                             builder: (context, userSnapshot) {
                                               if (userSnapshot
                                                       .connectionState ==
@@ -624,9 +624,10 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                                     Text(
                                                       'Uploaded at: $formattedTimestamp',
                                                       style: const TextStyle(
-                                                          fontStyle:
-                                                              FontStyle.italic,
-                                                          fontSize: 12),
+                                                        fontStyle:
+                                                            FontStyle.italic,
+                                                        fontSize: 12,
+                                                      ),
                                                     ),
                                                     const SizedBox(height: 8),
                                                     const Divider(height: 30),
@@ -634,7 +635,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                                 ),
                                               );
                                             }).toList(),
-                                          )
+                                          ),
                                       ],
                                     ),
                                   );

@@ -120,7 +120,7 @@ class _ListFotoPageState extends State<ListFotoPage> {
           if (diff.inHours >= 12 && outTime.hour >= 20) {
             newHadir++;
 
-            if (inTime.hour >= 8) {
+            if (inTime.hour > 8 || (inTime.hour == 8 && inTime.minute > 0)) {
               int telatMenit = ((inTime.hour - 8) * 60) + inTime.minute;
               newWaktuTelat += telatMenit;
               newTotalTelat++;
@@ -288,7 +288,8 @@ class _ListFotoPageState extends State<ListFotoPage> {
                 img['statusCheckedOut'] == true) {
               if (img['statusCheckInCheckOut'] == 'Masuk') {
                 dikurangHadir = 1;
-                if (imgTimestamp.hour >= 8) {
+                if (imgTimestamp.hour > 8 ||
+                    (imgTimestamp.hour == 8 && imgTimestamp.minute > 0)) {
                   dikurangTelat = 1;
                   dikurangWaktuTelat =
                       ((imgTimestamp.hour - 8) * 60) + imgTimestamp.minute;
@@ -589,7 +590,7 @@ class _ListFotoPageState extends State<ListFotoPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
                           if (!(image['statusCheckedIn'] == true ||
-                              image['statusCheckedOut'] == true)) ...[ 
+                              image['statusCheckedOut'] == true)) ...[
                             ElevatedButton.icon(
                               onPressed: () =>
                                   _updateStatus(widget.uid, image, "Approved"),

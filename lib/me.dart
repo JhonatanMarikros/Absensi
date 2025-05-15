@@ -108,6 +108,7 @@ class _MePageState extends State<MePage> {
   }
 
   Future<void> _uploadToCloudinary() async {
+    _showLoadingDialog();
     if (_selectedImage == null) return;
     try {
       var request = http.MultipartRequest('POST', Uri.parse(cloudinaryUrl));
@@ -131,10 +132,13 @@ class _MePageState extends State<MePage> {
       }
     } catch (e) {
       print('Error uploading to Cloudinary: $e');
+    } finally {
+      Navigator.pop(context); // tutup dialog
     }
   }
 
   void _updateUsername() async {
+    _showLoadingDialog();
     User? user = _auth.currentUser;
     if (user != null) {
       await _firestore.collection('users').doc(user.uid).update({
@@ -143,6 +147,7 @@ class _MePageState extends State<MePage> {
       setState(() {
         isEditing = false;
       });
+      Navigator.pop(context); // tutup dialog
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Username updated successfully!")),
       );
@@ -175,6 +180,22 @@ class _MePageState extends State<MePage> {
     );
   }
 
+  void _showLoadingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Text("Sedang memproses..."),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -200,104 +221,109 @@ class _MePageState extends State<MePage> {
           ],
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            GestureDetector(
-              onTap: _showImagePickerOptions,
-              child: CircleAvatar(
-                radius: 50,
-                backgroundImage: _selectedImage != null
-                    ? FileImage(_selectedImage!)
-                    : profileImage.isNotEmpty
-                        ? NetworkImage(profileImage)
-                        : AssetImage("assets/default_profile.png")
-                            as ImageProvider,
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              GestureDetector(
+                onTap: _showImagePickerOptions,
+                child: CircleAvatar(
+                  radius: 50,
+                  backgroundImage: _selectedImage != null
+                      ? FileImage(_selectedImage!)
+                      : profileImage.isNotEmpty
+                          ? NetworkImage(profileImage)
+                          : AssetImage("assets/default_profile.png")
+                              as ImageProvider,
+                ),
               ),
-            ),
-            SizedBox(height: 10),
-            _selectedImage != null
-                ? ElevatedButton(
-                    onPressed: _uploadToCloudinary,
-                    child: Icon(Icons.check),
-                  )
-                : SizedBox.shrink(),
-            SizedBox(height: 20),
-            Text("Email: $email", style: TextStyle(fontSize: 16)),
-            SizedBox(height: 10),
-            TextField(
-              controller: _usernameController,
-              enabled: isEditing,
-              decoration: InputDecoration(labelText: 'Username'),
-            ),
-            SizedBox(height: 20),
-            isEditing
-                ? ElevatedButton(
-                    onPressed: _updateUsername,
-                    child: Text("Save"),
-                  )
-                : ElevatedButton(
-                    onPressed: () {
-                      setState(() {
-                        isEditing = true;
-                      });
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.indigo[900],
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+              SizedBox(height: 10),
+              _selectedImage != null
+                  ? ElevatedButton(
+                      onPressed: _uploadToCloudinary,
+                      child: Icon(Icons.check),
+                    )
+                  : SizedBox.shrink(),
+              SizedBox(height: 20),
+              Text("Email: $email", style: TextStyle(fontSize: 16)),
+              SizedBox(height: 10),
+              TextField(
+                controller: _usernameController,
+                enabled: isEditing,
+                decoration: InputDecoration(labelText: 'Username'),
+              ),
+              SizedBox(height: 20),
+              isEditing
+                  ? ElevatedButton(
+                      onPressed: _updateUsername,
+                      child: Text("Save"),
+                    )
+                  : ElevatedButton(
+                      onPressed: () {
+                        setState(() {
+                          isEditing = true;
+                        });
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.indigo[900],
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: Text(
+                        "Edit Username",
+                        style: TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold),
                       ),
                     ),
-                    child: Text(
-                      "Edit Username",
-                      style: TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-            SizedBox(height: 20),
-            uid.isNotEmpty
-                ? StreamBuilder<DocumentSnapshot>(
-                    stream:
-                        _firestore.collection('photos').doc(uid).snapshots(),
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData || !snapshot.data!.exists) {
-                        return Center(child: Text("Statistik tidak tersedia"));
-                      }
+              SizedBox(height: 20),
+              uid.isNotEmpty
+                  ? StreamBuilder<DocumentSnapshot>(
+                      stream:
+                          _firestore.collection('photos').doc(uid).snapshots(),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData || !snapshot.data!.exists) {
+                          return Center(
+                              child: Text("Statistik tidak tersedia"));
+                        }
 
-                      Map<String, dynamic>? data =
-                          snapshot.data!.data() as Map<String, dynamic>?;
+                        Map<String, dynamic>? data =
+                            snapshot.data!.data() as Map<String, dynamic>?;
 
-                      if (data == null || !data.containsKey('statistics')) {
-                        return Center(
-                            child: Text("Data statistik belum tersedia"));
-                      }
+                        if (data == null || !data.containsKey('statistics')) {
+                          return Center(
+                              child: Text("Data statistik belum tersedia"));
+                        }
 
-                      Map<String, dynamic> stats =
-                          Map<String, dynamic>.from(data['statistics']);
-                      int hadirRealtime = stats['hadir'] ?? 0;
-                      int totalTelatRealtime = stats['totalTelat'] ?? 0;
-                      int waktuTelatRealtime = stats['waktuTelat'] ?? 0;
+                        Map<String, dynamic> stats =
+                            Map<String, dynamic>.from(data['statistics']);
+                        int hadirRealtime = stats['hadir'] ?? 0;
+                        int totalTelatRealtime = stats['totalTelat'] ?? 0;
+                        int waktuTelatRealtime = stats['waktuTelat'] ?? 0;
 
-                      return Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _buildAttendanceBox(
-                              "Hadir", "$hadirRealtime", Colors.green),
-                          _buildAttendanceBox("Total Telat",
-                              "$totalTelatRealtime hari", Colors.red),
-                          _buildAttendanceBox("Waktu Telat",
-                              "$waktuTelatRealtime menit", Colors.orange),
-                        ],
-                      );
-                    },
-                  )
-                : CircularProgressIndicator(),
-            SizedBox(height: 20),
-            Expanded(
-              child: uid.isNotEmpty
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _buildAttendanceBox(
+                                "Hadir", "$hadirRealtime", Colors.green),
+                            _buildAttendanceBox("Total Telat",
+                                "$totalTelatRealtime hari", Colors.red),
+                            _buildAttendanceBox("Waktu Telat",
+                                "$waktuTelatRealtime menit", Colors.orange),
+                          ],
+                        );
+                      },
+                    )
+                  : CircularProgressIndicator(),
+              SizedBox(height: 20),
+              Text(
+                "Riwayat Foto",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              uid.isNotEmpty
                   ? StreamBuilder<DocumentSnapshot>(
                       stream:
                           _firestore.collection('photos').doc(uid).snapshots(),
@@ -315,6 +341,8 @@ class _MePageState extends State<MePage> {
                         List<Map<String, dynamic>> imageUrls =
                             List<Map<String, dynamic>>.from(data['imageUrls']);
                         return ListView(
+                          shrinkWrap: true,
+                          physics: NeverScrollableScrollPhysics(),
                           children: imageUrls.map((image) {
                             var timestamp = image['timestamp']?.toDate();
                             String formattedTimestamp = timestamp != null
@@ -331,10 +359,11 @@ class _MePageState extends State<MePage> {
                                           fontWeight: FontWeight.w500)),
                                   const SizedBox(height: 4),
                                   Text(
-                                      'Check-In/Out: ${image['statusCheckInCheckOut'] ?? 'Tidak diketahui'}',
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w500,
-                                          color: Colors.black54)),
+                                    'Check-In/Out: ${image['statusCheckInCheckOut'] ?? 'Tidak diketahui'}',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.black54),
+                                  ),
                                   const SizedBox(height: 4),
                                   Text('Waktu: $formattedTimestamp',
                                       style:
@@ -348,8 +377,8 @@ class _MePageState extends State<MePage> {
                       },
                     )
                   : Center(child: CircularProgressIndicator()),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
