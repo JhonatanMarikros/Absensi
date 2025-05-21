@@ -490,7 +490,7 @@ class _ListFotoPageState extends State<ListFotoPage> {
                         ),
                         const SizedBox(height: 12),
                         Align(
-                          alignment: Alignment.centerRight,
+                          alignment: Alignment.center,
                           child: ElevatedButton.icon(
                             onPressed: _confirmResetDialog,
                             icon: const Icon(Icons.refresh),
@@ -500,9 +500,9 @@ class _ListFotoPageState extends State<ListFotoPage> {
                           ),
                         ),
                         // Tombol untuk upload slip gaji
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 0),
                         Align(
-                          alignment: Alignment.centerRight,
+                          alignment: Alignment.center,
                           child: ElevatedButton.icon(
                             onPressed: () {
                               // Navigasi ke halaman salary.dart untuk upload foto slip gaji
@@ -539,7 +539,8 @@ class _ListFotoPageState extends State<ListFotoPage> {
                 margin: const EdgeInsets.all(12),
                 elevation: 3,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Column(
@@ -564,15 +565,43 @@ class _ListFotoPageState extends State<ListFotoPage> {
                           ],
                         ),
                       ),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.network(
-                          image['imageUrl'],
-                          height: 200,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
+
+                      /// FOTO dengan rasio 4:3 + klik muncul pop-up
+                      GestureDetector(
+                        onTap: () {
+                          showDialog(
+                            context: context,
+                            builder: (_) => Dialog(
+                              insetPadding: EdgeInsets.all(100),
+                              child: Stack(
+                                children: [
+                                  InteractiveViewer(
+                                    panEnabled: true,
+                                    minScale: 0.5,
+                                    maxScale: 100,
+                                    child: Image.network(
+                                      image['imageUrl'],
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                        child: AspectRatio(
+                          aspectRatio: 4 / 3,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.network(
+                              image['imageUrl'],
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
                         ),
                       ),
+
                       const SizedBox(height: 10),
                       Text('Status: ${image['status']}',
                           style: const TextStyle(fontWeight: FontWeight.w500)),
@@ -586,6 +615,8 @@ class _ListFotoPageState extends State<ListFotoPage> {
                       Text('Waktu: $formattedTimestamp',
                           style: const TextStyle(color: Colors.grey)),
                       const SizedBox(height: 8),
+
+                      /// Tombol aksi
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
@@ -597,7 +628,8 @@ class _ListFotoPageState extends State<ListFotoPage> {
                               icon: const Icon(Icons.check),
                               label: const Text("Approve"),
                               style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green),
+                                backgroundColor: Colors.green,
+                              ),
                             ),
                             ElevatedButton.icon(
                               onPressed: () =>
@@ -605,7 +637,8 @@ class _ListFotoPageState extends State<ListFotoPage> {
                               icon: const Icon(Icons.close),
                               label: const Text("Reject"),
                               style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red),
+                                backgroundColor: Colors.red,
+                              ),
                             ),
                           ],
                           ElevatedButton.icon(
@@ -613,7 +646,8 @@ class _ListFotoPageState extends State<ListFotoPage> {
                             icon: const Icon(Icons.delete),
                             label: const Text("Delete"),
                             style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.grey[700]),
+                              backgroundColor: Colors.grey[700],
+                            ),
                           ),
                         ],
                       ),

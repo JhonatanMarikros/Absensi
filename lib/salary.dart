@@ -17,7 +17,7 @@ class SalaryPage extends StatefulWidget {
 }
 
 class _SalaryPageState extends State<SalaryPage> {
-  bool isUploading = false; // indikator loading
+  bool isUploading = false;
 
   Future<void> uploadSlipGajiToCloudinary(String uid, String username) async {
     final result = await FilePicker.platform.pickFiles(
@@ -33,7 +33,7 @@ class _SalaryPageState extends State<SalaryPage> {
     }
 
     setState(() {
-      isUploading = true; // mulai loading
+      isUploading = true;
     });
 
     List<Map<String, dynamic>> salaryImages = [];
@@ -43,8 +43,7 @@ class _SalaryPageState extends State<SalaryPage> {
         final filePath = file.path;
         if (filePath == null) continue;
 
-        final uri =
-            Uri.parse('https://api.cloudinary.com/v1_1/dxmczui47/image/upload');
+        final uri = Uri.parse('https://api.cloudinary.com/v1_1/dxmczui47/image/upload');
         final request = http.MultipartRequest('POST', uri)
           ..fields['upload_preset'] = 'salary'
           ..files.add(await http.MultipartFile.fromPath('file', filePath));
@@ -74,11 +73,8 @@ class _SalaryPageState extends State<SalaryPage> {
         }, SetOptions(merge: true));
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Slip gaji berhasil diunggah untuk $username')),
+          SnackBar(content: Text('Slip gaji berhasil diunggah untuk $username')),
         );
-      } else {
-        print('Tidak ada gambar yang berhasil diupload');
       }
     } catch (e) {
       print('Error saat upload: $e');
@@ -87,9 +83,30 @@ class _SalaryPageState extends State<SalaryPage> {
       );
     } finally {
       setState(() {
-        isUploading = false; // selesai loading
+        isUploading = false;
       });
     }
+  }
+
+  void _showImagePopup(String imageUrl) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: GestureDetector(
+          onTap: () => Navigator.of(context).pop(),
+          child: InteractiveViewer(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                imageUrl,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -128,8 +145,7 @@ class _SalaryPageState extends State<SalaryPage> {
                       }
 
                       if (!snapshot.hasData || !snapshot.data!.exists) {
-                        return const Center(
-                            child: Text('Belum ada slip gaji diunggah.'));
+                        return const Center(child: Text('Belum ada slip gaji diunggah.'));
                       }
 
                       final data = snapshot.data!;
@@ -138,8 +154,7 @@ class _SalaryPageState extends State<SalaryPage> {
                       );
 
                       if (salaryImagesData.isEmpty) {
-                        return const Center(
-                            child: Text('Tidak ada gambar yang diunggah.'));
+                        return const Center(child: Text('Tidak ada gambar yang diunggah.'));
                       }
 
                       return SingleChildScrollView(
@@ -164,37 +179,66 @@ class _SalaryPageState extends State<SalaryPage> {
                               padding: const EdgeInsets.all(8.0),
                               child: Card(
                                 elevation: 3,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Image.network(imageUrl),
-                                    Padding(
-                                      padding: const EdgeInsets.all(8.0),
-                                      child:
-                                          Text('Diupload pada: $formattedTime'),
+                                    GestureDetector(
+                                      onTap: () {
+                                        _showImagePopup(imageUrl);
+                                      },
+                                      child: AspectRatio(
+                                        aspectRatio: 4 / 3,
+                                        child: ClipRRect(
+                                          borderRadius: const BorderRadius.vertical(
+                                              top: Radius.circular(12)),
+                                          child: Image.network(
+                                            imageUrl,
+                                            width: double.infinity,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                    Align(
-                                      alignment: Alignment.centerRight,
-                                      child: IconButton(
-                                        icon: const Icon(Icons.delete,
-                                            color: Colors.red),
-                                        onPressed: () async {
-                                          await FirebaseFirestore.instance
-                                              .collection('salary')
-                                              .doc(widget.uid)
-                                              .update({
-                                            'salary_images':
-                                                FieldValue.arrayRemove(
-                                                    [imageData]),
-                                          });
+                                    Padding(
+                                      padding: const EdgeInsets.all(10.0),
+                                      child: Text('Diupload pada: $formattedTime'),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                          right: 10.0, bottom: 10.0),
+                                      child: Align(
+                                        alignment: Alignment.centerRight,
+                                        child: ElevatedButton.icon(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.red.shade600,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 16, vertical: 10),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                          ),
+                                          onPressed: () async {
+                                            await FirebaseFirestore.instance
+                                                .collection('salary')
+                                                .doc(widget.uid)
+                                                .update({
+                                              'salary_images':
+                                                  FieldValue.arrayRemove([imageData]),
+                                            });
 
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
-                                            const SnackBar(
-                                                content: Text(
-                                                    'Gambar berhasil dihapus')),
-                                          );
-                                        },
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                  content:
+                                                      Text('Gambar berhasil dihapus')),
+                                            );
+                                          },
+                                          icon: const Icon(Icons.delete),
+                                          label: const Text('Hapus Slip'),
+                                        ),
                                       ),
                                     ),
                                   ],

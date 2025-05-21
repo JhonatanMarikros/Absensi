@@ -116,11 +116,11 @@ class _AbsensiPageState extends State<AbsensiPage> {
             ),
             SizedBox(height: 20),
 
-            Row(
+             Row(
               children: [
-                Expanded(child: _buildNotificationCard("Segera Diselesaikan", "Pelindungan Data Pribadi", "Hingga 31/12/99")),
+                Expanded(child: _buildNotificationCard("Check In", "Untuk Absensi Masuk kerja", "Selamat Bekerja")),
                 SizedBox(width: 10),
-                Expanded(child: _buildNotificationCard("Segera Diselesaikan", "Pernyataan Anggota Kopkari", "Hingga 31/12/99")),
+                Expanded(child: _buildNotificationCard("Check Out", "Untuk Absensi Keluar Kerja", "Sampai Jumpa")),
               ],
             ),
             SizedBox(height: 20),
