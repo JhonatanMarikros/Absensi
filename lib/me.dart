@@ -228,7 +228,7 @@ class _MePageState extends State<MePage> {
             CircleAvatar(
               backgroundImage: profileImage.isNotEmpty
                   ? NetworkImage(profileImage)
-                  : AssetImage('assets/profile.jpg') as ImageProvider,
+                  : AssetImage('assets/profile.png') as ImageProvider,
               radius: 20,
             ),
           ],
@@ -247,7 +247,7 @@ class _MePageState extends State<MePage> {
                       ? FileImage(_selectedImage!)
                       : profileImage.isNotEmpty
                           ? NetworkImage(profileImage)
-                          : AssetImage("assets/default_profile.png") as ImageProvider,
+                          : AssetImage("assets/profile.png") as ImageProvider,
                 ),
               ),
               SizedBox(height: 10),

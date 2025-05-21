@@ -59,7 +59,7 @@ class _HomeMainState extends State<HomeMain> {
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.indigo[900],
+        backgroundColor:Colors.indigo[900],
         title: Row(
           children: [
             Icon(Icons.home, color: Colors.white),
@@ -69,7 +69,7 @@ class _HomeMainState extends State<HomeMain> {
             CircleAvatar(
               backgroundImage: profileUrl.isNotEmpty
                   ? NetworkImage(profileUrl)
-                  : AssetImage('assets/profile.jpg') as ImageProvider,
+                  : AssetImage('assets/profile.png') as ImageProvider,
               radius: 20,
             ),
           ],
@@ -109,7 +109,8 @@ class _HomeMainState extends State<HomeMain> {
               child:
                   Text("Lihat Slip Gaji", style: TextStyle(fontSize: 16)),
               style: ElevatedButton.styleFrom(
-                primary: Colors.indigo[900], // Warna tombol
+                primary: Colors.indigo[900],
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), // Warna tombol
                 padding: EdgeInsets.symmetric(vertical: 12),
               ),
             ),

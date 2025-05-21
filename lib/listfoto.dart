@@ -118,10 +118,23 @@ class _ListFotoPageState extends State<ListFotoPage> {
 
           // Validasi 12 jam kerja dan checkout >= jam 20
           if (diff.inHours >= 12 && outTime.hour >= 20) {
+            // Lewat jam 11:00 tidak dihitung hadir
+            if (inTime.isAfter(
+                DateTime(inTime.year, inTime.month, inTime.day, 11, 0))) {
+              return; // Tidak dihitung hadir
+            }
+
             newHadir++;
 
-            if (inTime.hour > 8 || (inTime.hour == 8 && inTime.minute > 0)) {
-              int telatMenit = ((inTime.hour - 8) * 60) + inTime.minute;
+            // Buat versi inTime tanpa detik dan milidetik
+            final inTimeRounded = DateTime(inTime.year, inTime.month,
+                inTime.day, inTime.hour, inTime.minute);
+            final batasTelat =
+                DateTime(inTime.year, inTime.month, inTime.day, 8, 15);
+
+            // Telat jika lebih dari jam 08:15
+            if (inTimeRounded.isAfter(batasTelat)) {
+              int telatMenit = inTimeRounded.difference(batasTelat).inMinutes;
               newWaktuTelat += telatMenit;
               newTotalTelat++;
             }
@@ -264,7 +277,7 @@ class _ListFotoPageState extends State<ListFotoPage> {
     }
   }
 
-  Future<void> _undoApproval(String uid, ImageData image) async {
+   Future<void> _undoApproval(String uid, ImageData image) async {
     try {
       DocumentReference docRef = _firestore.collection('photos').doc(uid);
       DocumentSnapshot snapshot = await docRef.get();
@@ -283,59 +296,50 @@ class _ListFotoPageState extends State<ListFotoPage> {
           if (img['status'] == 'Approved') {
             final imgTimestamp =
                 (img['timestamp'] as Timestamp).toDate().toLocal();
+            final imgRounded = DateTime(imgTimestamp.year, imgTimestamp.month,
+                imgTimestamp.day, imgTimestamp.hour, imgTimestamp.minute);
+            final batasTelat = DateTime(
+                imgTimestamp.year, imgTimestamp.month, imgTimestamp.day, 8, 15);
 
             if (img['statusCheckedIn'] == true ||
                 img['statusCheckedOut'] == true) {
               if (img['statusCheckInCheckOut'] == 'Masuk') {
-                dikurangHadir = 1;
-                if (imgTimestamp.hour > 8 ||
-                    (imgTimestamp.hour == 8 && imgTimestamp.minute > 0)) {
-                  dikurangTelat = 1;
-                  dikurangWaktuTelat =
-                      ((imgTimestamp.hour - 8) * 60) + imgTimestamp.minute;
+                if (imgTimestamp.isBefore(DateTime(imgTimestamp.year,
+                    imgTimestamp.month, imgTimestamp.day, 11, 1))) {
+                  dikurangHadir = 1;
+
+                  if (imgRounded.isAfter(batasTelat)) {
+                    dikurangTelat = 1;
+                    dikurangWaktuTelat =
+                        imgRounded.difference(batasTelat).inMinutes;
+                  }
                 }
               } else if (img['statusCheckInCheckOut'] == 'Keluar') {
                 // Cari pasangan masuk di tanggal yang sama
                 for (var otherImg in imageUrls) {
+                  final otherTime =
+                      (otherImg['timestamp'] as Timestamp).toDate().toLocal();
+                  final otherRounded = DateTime(otherTime.year, otherTime.month,
+                      otherTime.day, otherTime.hour, otherTime.minute);
+                  final batasTelatOther = DateTime(
+                      otherTime.year, otherTime.month, otherTime.day, 8, 15);
+
                   if (otherImg['statusCheckInCheckOut'] == 'Masuk' &&
-                      (otherImg['timestamp'] as Timestamp)
-                              .toDate()
-                              .toLocal()
-                              .day ==
-                          imgTimestamp.day &&
-                      (otherImg['timestamp'] as Timestamp)
-                              .toDate()
-                              .toLocal()
-                              .month ==
-                          imgTimestamp.month &&
-                      (otherImg['timestamp'] as Timestamp)
-                              .toDate()
-                              .toLocal()
-                              .year ==
-                          imgTimestamp.year &&
+                      otherTime.day == imgTimestamp.day &&
+                      otherTime.month == imgTimestamp.month &&
+                      otherTime.year == imgTimestamp.year &&
                       otherImg['statusCheckedIn'] == true) {
-                    // Jika pasangan ditemukan, kurangi statistik
-                    dikurangHadir = 1;
-                    if ((otherImg['timestamp'] as Timestamp)
-                            .toDate()
-                            .toLocal()
-                            .hour >=
-                        8) {
-                      dikurangTelat = 1;
-                      dikurangWaktuTelat =
-                          (((otherImg['timestamp'] as Timestamp)
-                                          .toDate()
-                                          .toLocal()
-                                          .hour -
-                                      8) *
-                                  60) +
-                              ((otherImg['timestamp'] as Timestamp)
-                                  .toDate()
-                                  .toLocal()
-                                  .minute);
+                    if (otherTime.isBefore(DateTime(otherTime.year,
+                        otherTime.month, otherTime.day, 11, 1))) {
+                      dikurangHadir = 1;
+
+                      if (otherRounded.isAfter(batasTelatOther)) {
+                        dikurangTelat = 1;
+                        dikurangWaktuTelat =
+                            otherRounded.difference(batasTelatOther).inMinutes;
+                      }
                     }
 
-                    // Reset pasangan
                     otherImg.remove('statusCheckedIn');
                     otherImg.remove('statusCheckedOut');
                     break;
@@ -345,28 +349,18 @@ class _ListFotoPageState extends State<ListFotoPage> {
 
               // Reset pasangan di tanggal yang sama
               for (var otherImg in imageUrls) {
+                final otherTime =
+                    (otherImg['timestamp'] as Timestamp).toDate().toLocal();
+
                 if (otherImg['imageUrl'] != img['imageUrl'] &&
-                    (otherImg['timestamp'] as Timestamp)
-                            .toDate()
-                            .toLocal()
-                            .day ==
-                        imgTimestamp.day &&
-                    (otherImg['timestamp'] as Timestamp)
-                            .toDate()
-                            .toLocal()
-                            .month ==
-                        imgTimestamp.month &&
-                    (otherImg['timestamp'] as Timestamp)
-                            .toDate()
-                            .toLocal()
-                            .year ==
-                        imgTimestamp.year) {
+                    otherTime.day == imgTimestamp.day &&
+                    otherTime.month == imgTimestamp.month &&
+                    otherTime.year == imgTimestamp.year) {
                   otherImg.remove('statusCheckedIn');
                   otherImg.remove('statusCheckedOut');
                 }
               }
 
-              // Reset status sendiri
               if (img['statusCheckInCheckOut'] == 'Masuk') {
                 img.remove('statusCheckedIn');
               } else if (img['statusCheckInCheckOut'] == 'Keluar') {
@@ -379,7 +373,7 @@ class _ListFotoPageState extends State<ListFotoPage> {
         }
       }
 
-      // Kurangi statistik
+      // Update statistik
       Map<String, dynamic> stats = data['statistics'] ??
           {
             'hadir': 0,

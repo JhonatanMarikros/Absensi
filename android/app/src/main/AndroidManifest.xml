@@ -10,7 +10,7 @@
 
     
     <application
-        android:label="absensi"
+        android:label="SBM"
         android:name="${applicationName}"
         android:requestLegacyExternalStorage="true"
         android:icon="@mipmap/ic_launcher">
