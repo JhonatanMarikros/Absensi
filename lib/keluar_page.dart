@@ -74,7 +74,7 @@ class _KeluarPageState extends State<KeluarPage> {
                       radius: 25,
                       backgroundImage: profileUrl.isNotEmpty
                           ? NetworkImage(profileUrl)
-                          : AssetImage('assets/profile.jpg') as ImageProvider,
+                          : AssetImage('assets/profile.png') as ImageProvider,
                     ),
                   ],
                 ),

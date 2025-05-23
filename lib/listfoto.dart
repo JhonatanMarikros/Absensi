@@ -117,7 +117,7 @@ class _ListFotoPageState extends State<ListFotoPage> {
           var diff = outTime.difference(inTime);
 
           // Validasi 12 jam kerja dan checkout >= jam 20
-          if (diff.inHours >= 12 && outTime.hour >= 20) {
+          if (outTime.hour >= 20) {
             // Lewat jam 11:00 tidak dihitung hadir
             if (inTime.isAfter(
                 DateTime(inTime.year, inTime.month, inTime.day, 11, 0))) {

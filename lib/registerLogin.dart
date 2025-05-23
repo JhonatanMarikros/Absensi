@@ -12,20 +12,16 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _usernameController = TextEditingController();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  bool isLogin = true;
   bool _isLoading = false;
   bool _obscurePassword = true;
-  String? _selectedPosition;
-  final List<String> _positions = ['Direktur', 'HRD', 'Karyawan', 'Harian', 'Sales'];
 
-  void _authenticate() async {
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty || (!isLogin && _usernameController.text.isEmpty)) {
+  void _login() async {
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Mohon isi semua kolom yang diperlukan.')),
+        SnackBar(content: Text('Mohon isi semua kolom.')),
       );
       return;
     }
@@ -35,54 +31,25 @@ class _AuthScreenState extends State<AuthScreen> {
     });
 
     try {
-      if (isLogin) {
-        // Login
-        UserCredential userCredential = await _auth.signInWithEmailAndPassword(
-          email: _emailController.text,
-          password: _passwordController.text,
-        );
+      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
 
-        DocumentSnapshot userDoc = await _firestore
-            .collection('users')
-            .doc(userCredential.user!.uid)
-            .get();
-        String role = userDoc.exists ? userDoc['role'] : 'user';
+      DocumentSnapshot userDoc = await _firestore
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .get();
+      String role = userDoc.exists ? userDoc['role'] : 'user';
 
-        if (role == 'admin') {
-          Navigator.pushReplacement(
-              context, MaterialPageRoute(builder: (context) => AdminHomePage()));
-        } else {
-          Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                  builder: (context) => MainPage(uid: userCredential.user!.uid)));
-        }
+      if (role == 'admin') {
+        Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (context) => AdminHomePage()));
       } else {
-        // Register
-        UserCredential userCredential =
-            await _auth.createUserWithEmailAndPassword(
-          email: _emailController.text,
-          password: _passwordController.text,
-        );
-
-        await _firestore.collection('users').doc(userCredential.user!.uid).set({
-          'uid': userCredential.user!.uid,
-          'email': _emailController.text,
-          'username': _usernameController.text,
-          'profile': "",
-          'role': 'user',
-          'position': _selectedPosition ?? '',
-        });
-
-        await _auth.signOut();
-
-        setState(() {
-          isLogin = true;
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Registrasi berhasil. Silakan login.')),
-        );
+        Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+                builder: (context) => MainPage(uid: userCredential.user!.uid)));
       }
     } on FirebaseAuthException catch (e) {
       String message;
@@ -95,12 +62,6 @@ class _AuthScreenState extends State<AuthScreen> {
           break;
         case 'wrong-password':
           message = 'Password salah.';
-          break;
-        case 'email-already-in-use':
-          message = 'Email sudah digunakan.';
-          break;
-        case 'weak-password':
-          message = 'Password minimal 6 karakter.';
           break;
         default:
           message = 'Terjadi kesalahan: ${e.message}';
@@ -134,57 +95,28 @@ class _AuthScreenState extends State<AuthScreen> {
                 Image.asset('assets/SBM.png', height: 150),
                 SizedBox(height: 20),
                 Text(
-                  isLogin ? 'Welcome Back!' : 'Create an Account',
+                  'Welcome Back!',
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
                 SizedBox(height: 10),
                 Text(
-                  isLogin ? 'Login to continue' : 'Sign up to get started',
+                  'Login to continue',
                   style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                 ),
                 SizedBox(height: 30),
-                if (!isLogin)
-                  _buildTextField(_usernameController, "Username", Icons.person),
                 _buildTextField(_emailController, "Email", Icons.email),
                 _buildTextField(_passwordController, "Password", Icons.lock, isPassword: true),
-                if (!isLogin)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: DropdownButtonFormField<String>(
-                      value: _selectedPosition,
-                      decoration: InputDecoration(
-                        labelText: "Position",
-                        prefixIcon: Icon(Icons.work, color: Colors.blueAccent),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
-                      ),
-                      items: _positions.map((position) {
-                        return DropdownMenuItem(
-                          value: position,
-                          child: Text(position),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedPosition = value;
-                        });
-                      },
-                    ),
-                  ),
                 SizedBox(height: 20),
                 _isLoading
                     ? Column(
                         children: [
                           CircularProgressIndicator(),
                           SizedBox(height: 10),
-                          Text(isLogin ? 'Proses login...' : 'Proses register...')
+                          Text('Proses login...')
                         ],
                       )
                     : ElevatedButton(
-                        onPressed: _authenticate,
+                        onPressed: _login,
                         style: ElevatedButton.styleFrom(
                           padding: EdgeInsets.symmetric(vertical: 14),
                           backgroundColor: Colors.blueAccent,
@@ -193,24 +125,10 @@ class _AuthScreenState extends State<AuthScreen> {
                           minimumSize: Size(double.infinity, 50),
                         ),
                         child: Text(
-                          isLogin ? 'Login' : 'Register',
+                          'Login',
                           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                       ),
-                SizedBox(height: 20),
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      isLogin = !isLogin;
-                    });
-                  },
-                  child: Text(
-                    isLogin
-                        ? "Don't have an account? Sign Up"
-                        : "Already have an account? Login",
-                    style: TextStyle(fontSize: 16, color: Colors.blueAccent),
-                  ),
-                ),
               ],
             ),
           ),

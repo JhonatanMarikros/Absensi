@@ -107,7 +107,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                     CircleAvatar(
                       backgroundImage: profileUrl.isNotEmpty
                           ? NetworkImage(profileUrl)
-                          : AssetImage('assets/profile.jpg') as ImageProvider,
+                          : AssetImage('assets/profile.png') as ImageProvider,
                       radius: 25,
                     ),
                   ],

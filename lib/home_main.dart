@@ -41,7 +41,7 @@ class _HomeMainState extends State<HomeMain> {
       final slipQuery = await FirebaseFirestore.instance
           .collection('salary')
           .where('uid', isEqualTo: user.uid)
-          .orderBy('timestamp', descending: true)
+          // .orderBy('timestamp', descending: true)
           .limit(1)
           .get();
 

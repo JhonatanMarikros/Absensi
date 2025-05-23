@@ -12,6 +12,7 @@ import 'package:app_settings/app_settings.dart';
 import 'dart:convert';
 import 'registerLogin.dart';
 import 'listfoto.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 typedef ImageData = Map<String, dynamic>;
 
@@ -25,6 +26,19 @@ class _AdminHomePageState extends State<AdminHomePage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+
+  // Untuk tambah user
+  final TextEditingController _userEmailController = TextEditingController();
+  final TextEditingController _userPasswordController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
+  String? _selectedPosition;
+  final List<String> _positions = [
+    'Direktur',
+    'HRD',
+    'Karyawan',
+    'Harian',
+    'Sales'
+  ];
 
   String? selectedUserId;
 
@@ -109,10 +123,144 @@ class _AdminHomePageState extends State<AdminHomePage> {
     );
   }
 
+  Future<void> _addUser() async {
+    String email = _userEmailController.text.trim();
+    String password = _userPasswordController.text.trim();
+    String username = _usernameController.text.trim();
+
+    if (email.isEmpty ||
+        password.isEmpty ||
+        username.isEmpty ||
+        _selectedPosition == null) {
+      _showDialogAdmin("Semua field harus diisi!");
+      return;
+    }
+
+    if (password.length < 6) {
+      _showDialogAdmin("Password harus minimal 6 karakter");
+      return;
+    }
+
+    try {
+      // Inisialisasi Secondary App
+      final FirebaseApp secondaryApp = await Firebase.initializeApp(
+        name: 'SecondaryApp',
+        options: Firebase.app().options,
+      );
+
+      // Gunakan FirebaseAuth khusus secondary app
+      final FirebaseAuth secondaryAuth =
+          FirebaseAuth.instanceFor(app: secondaryApp);
+
+      // Buat akun baru lewat secondary auth
+      UserCredential userCredential = await secondaryAuth
+          .createUserWithEmailAndPassword(email: email, password: password);
+
+      // Simpan data user di Firestore (tetap pakai instance utama)
+      await _firestore.collection('users').doc(userCredential.user!.uid).set({
+        'uid': userCredential.user!.uid,
+        'email': email,
+        'username': username,
+        'role': 'user',
+        'profile': "",
+        'position': _selectedPosition,
+      });
+
+      // Logout dari secondary auth agar tidak ganggu sesi admin
+      await secondaryAuth.signOut();
+
+      // Bersihkan form
+      _userEmailController.clear();
+      _userPasswordController.clear();
+      _usernameController.clear();
+      _selectedPosition = null;
+
+      // Notifikasi sukses
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text("Sukses"),
+          content: Text("User berhasil ditambahkan!"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text("OK"),
+            )
+          ],
+        ),
+      );
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        _showDialogAdmin("Email tersebut sudah digunakan");
+      } else {
+        _showDialogAdmin("Terjadi kesalahan: ${e.message}");
+      }
+    } catch (e) {
+      _showDialogAdmin("Terjadi kesalahan: ${e.toString()}");
+    }
+  }
+
   Future<String> _getUsername(String uid) async {
     DocumentSnapshot userDoc =
         await _firestore.collection('users').doc(uid).get();
     return userDoc.exists ? userDoc['username'] ?? 'Unknown' : 'Unknown';
+  }
+
+  Stream<QuerySnapshot> getUsersStream() {
+    return _firestore
+        .collection('users')
+        .where('role', isEqualTo: 'user')
+        .snapshots();
+  }
+
+  void _confirmDeleteUser(String userId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("Konfirmasi Hapus"),
+        content: Text("Yakin ingin menghapus user ini dari sistem?"),
+        actions: [
+          TextButton(
+            child: Text("Batal"),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          TextButton(
+            child: Text("Hapus", style: TextStyle(color: Colors.red)),
+            onPressed: () async {
+              Navigator.of(context).pop();
+
+              // Hapus dokumen dari 'users'
+              await _firestore.collection('users').doc(userId).delete();
+              await _firestore.collection('salary').doc(userId).delete();
+              await _firestore.collection('photos').doc(userId).delete();
+
+              // Tampilkan informasi
+              _showInfoDelete();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showInfoDelete() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("Informasi Penghapusan"),
+        content: Text(
+          "User berhasil dihapus dari database.\n\n"
+          "⚠️ Namun akun email masih aktif.\n"
+          "Silahkan hapus email secara manual melalui Firebase Authentication Console.",
+        ),
+        actions: [
+          TextButton(
+            child: Text("Tutup"),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _deleteFromCloudinary(String imageUrl) async {
@@ -326,6 +474,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
   @override
   bool _showAddAdminForm = false;
+  bool _showAddUserForm = false;
+  bool _showUserList = false;
 
   @override
   Widget build(BuildContext context) {
@@ -441,7 +591,183 @@ class _AdminHomePageState extends State<AdminHomePage> {
                             secondChild: SizedBox.shrink(),
                           ),
 
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 12),
+
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _showAddUserForm = !_showAddUserForm;
+                              });
+                            },
+                            icon: Icon(
+                                _showAddUserForm ? Icons.remove : Icons.add),
+                            label: Text(_showAddUserForm
+                                ? "Tutup Form User"
+                                : "Tambah User"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Tambah User
+                          AnimatedCrossFade(
+                            crossFadeState: _showAddUserForm
+                                ? CrossFadeState.showFirst
+                                : CrossFadeState.showSecond,
+                            duration: Duration(milliseconds: 300),
+                            firstChild: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 12),
+                                Text(
+                                  'Form Tambah User',
+                                  style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 12),
+                                TextField(
+                                  controller: _usernameController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Username',
+                                    prefixIcon: Icon(Icons.person),
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                TextField(
+                                  controller: _userEmailController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Email User',
+                                    prefixIcon: Icon(Icons.email),
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                TextField(
+                                  controller: _userPasswordController,
+                                  obscureText: true,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Password',
+                                    prefixIcon: Icon(Icons.lock),
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                DropdownButtonFormField<String>(
+                                  value: _selectedPosition,
+                                  decoration: InputDecoration(
+                                    labelText: "Position",
+                                    prefixIcon: Icon(Icons.work),
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  items: _positions.map((position) {
+                                    return DropdownMenuItem(
+                                      value: position,
+                                      child: Text(position),
+                                    );
+                                  }).toList(),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _selectedPosition = value;
+                                    });
+                                  },
+                                ),
+                                const SizedBox(height: 16),
+                                ElevatedButton.icon(
+                                  onPressed: _addUser,
+                                  icon: Icon(Icons.save),
+                                  label: Text("Simpan User"),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 14),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            secondChild: SizedBox.shrink(),
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _showUserList = !_showUserList;
+                              });
+                            },
+                            icon:
+                                Icon(_showUserList ? Icons.remove : Icons.list),
+                            label: Text(_showUserList
+                                ? "Tutup Daftar Akun User"
+                                : "Lihat Daftar Akun User"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.deepPurple,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          AnimatedCrossFade(
+                            crossFadeState: _showUserList
+                                ? CrossFadeState.showFirst
+                                : CrossFadeState.showSecond,
+                            duration: Duration(milliseconds: 300),
+                            firstChild: SizedBox(
+                              height: 400,
+                              child: StreamBuilder<QuerySnapshot>(
+                                stream: getUsersStream(),
+                                builder: (context, snapshot) {
+                                  if (snapshot.connectionState ==
+                                      ConnectionState.waiting) {
+                                    return Center(
+                                        child: CircularProgressIndicator());
+                                  }
+                                  if (!snapshot.hasData ||
+                                      snapshot.data!.docs.isEmpty) {
+                                    return Center(
+                                        child:
+                                            Text("Belum ada user terdaftar."));
+                                  }
+
+                                  return ListView.builder(
+                                    itemCount: snapshot.data!.docs.length,
+                                    itemBuilder: (context, index) {
+                                      var doc = snapshot.data!.docs[index];
+                                      var data =
+                                          doc.data() as Map<String, dynamic>;
+
+                                      final username =
+                                          data['username'] ?? 'Tanpa Username';
+                                      final email =
+                                          data['email'] ?? 'Tanpa Email';
+                                      final position =
+                                          data['position'] ?? 'Tanpa Posisi';
+
+                                      return Card(
+                                        child: ListTile(
+                                          title: Text(username),
+                                          subtitle: Text('$email - $position'),
+                                          trailing: IconButton(
+                                            icon: Icon(Icons.delete,
+                                                color: Colors.red),
+                                            onPressed: () =>
+                                                _confirmDeleteUser(doc.id),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  );
+                                },
+                              ),
+                            ),
+                            secondChild: SizedBox.shrink(),
+                          ),
+
+                          const SizedBox(height: 12),
 
                           // Tombol export excel
                           ElevatedButton.icon(
