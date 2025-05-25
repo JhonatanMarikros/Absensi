@@ -76,7 +76,7 @@ dev_dependencies:
 flutter_icons:
   android: true
   ios: true
-  image_path: "assets/ICONSBM.png" # Ganti dengan path icon kamu
+  image_path: "assets/SBMOLD.png" # Ganti dengan path icon kamu
 
 
 # For information on the generic Dart part of this file, see the
@@ -89,6 +89,7 @@ flutter:
     - assets/SBMNEW.png
     - assets/SBM.png
     - assets/profile.png
+    - assets/SBMOLD.png
 
 
 

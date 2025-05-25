@@ -491,7 +491,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
               title: Row(
                 children: [
                   Image.asset(
-                    'assets/SBMNEW.png',
+                    'assets/SBMOLD.png',
                     width: 60,
                     height: 60,
                   ),

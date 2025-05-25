@@ -84,7 +84,7 @@ class _MainPageState extends State<MainPage> {
                       child: Padding(
                         padding: const EdgeInsets.only(top: 15.0),
                         child: Image.asset(
-                          'assets/SBMNEW.png',
+                          'assets/SBMOLD.png',
                           height: 300,
                         ),
                       ),
