@@ -6,6 +6,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
 import 'package:ntp/ntp.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 
 class CameraPage extends StatefulWidget {
   final String statusCheckInCheckOut;
@@ -24,6 +26,8 @@ class _CameraPageState extends State<CameraPage> {
   File? _capturedImage;
   bool _isUploading = false;
   bool _isCapturing = false;
+  Position? _currentPosition;
+  String? _currentAddress; // untuk simpan alamat hasil geocoding
 
   final String cloudinaryUrl =
       "https://api.cloudinary.com/v1_1/dxmczui47/image/upload";
@@ -66,8 +70,70 @@ class _CameraPageState extends State<CameraPage> {
     setState(() {});
   }
 
+  Future<void> _getLocation() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      print('Layanan lokasi tidak aktif');
+      await Geolocator.openLocationSettings();
+      return;
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        print('Izin lokasi ditolak');
+        return;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      print('Izin lokasi ditolak permanen');
+      return;
+    }
+
+    try {
+      _currentPosition = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high);
+      print('Lokasi berhasil: $_currentPosition');
+
+      // Dapatkan alamat lengkap dari lat,long
+      _currentAddress = await getAddressFromLatLng(
+          _currentPosition!.latitude, _currentPosition!.longitude);
+      print('Alamat lengkap: $_currentAddress');
+
+    } catch (e) {
+      print('Gagal mendapatkan lokasi atau alamat: $e');
+    }
+  }
+
+  // Fungsi reverse geocoding
+  Future<String> getAddressFromLatLng(double latitude, double longitude) async {
+    try {
+      List<Placemark> placemarks =
+          await placemarkFromCoordinates(latitude, longitude);
+
+      if (placemarks.isNotEmpty) {
+        Placemark place = placemarks.first;
+        // Format alamat lengkap (bisa disesuaikan)
+        String alamat =
+            '${place.street}, ${place.subLocality}, ${place.locality}, ${place.administrativeArea}, ${place.country}';
+        return alamat;
+      } else {
+        return "Alamat tidak ditemukan";
+      }
+    } catch (e) {
+      print('Error pada geocoding: $e');
+      return "Error mendapatkan alamat";
+    }
+  }
+
   Future<void> _capturePhoto() async {
     try {
+      await _getLocation(); // Pastikan dapat lokasi dan alamat dulu
       setState(() => _isCapturing = true);
 
       await _initializeControllerFuture;
@@ -88,6 +154,16 @@ class _CameraPageState extends State<CameraPage> {
     setState(() => _isUploading = true);
 
     try {
+      if (_currentPosition == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  'Gagal mendapatkan lokasi. Pastikan lokasi aktif dan diizinkan.')),
+        );
+        setState(() => _isUploading = false);
+        return;
+      }
+
       User? user = _auth.currentUser;
       if (user == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -147,6 +223,11 @@ class _CameraPageState extends State<CameraPage> {
           'status': 'pending',
           'timestamp': Timestamp.fromDate(ntpTime),
           'statusCheckInCheckOut': widget.statusCheckInCheckOut,
+          'lokasi': {
+            'latitude': _currentPosition!.latitude,
+            'longitude': _currentPosition!.longitude,
+            'alamat': _currentAddress ?? 'Alamat tidak tersedia',
+          },
         };
 
         if (snapshot.exists) {
@@ -264,16 +345,17 @@ class _CameraPageState extends State<CameraPage> {
                       CircularProgressIndicator(),
                       SizedBox(height: 16),
                       Text(
-                        'Proses Capture Photo...',
+                        'Mengambil foto...',
                         style: TextStyle(color: Colors.white, fontSize: 16),
                       ),
                     ],
                   ),
                 )
               : Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Expanded(
-                      child: _capturedImage == null
+                      child: (_capturedImage == null)
                           ? FutureBuilder<void>(
                               future: _initializeControllerFuture,
                               builder: (context, snapshot) {
@@ -286,51 +368,27 @@ class _CameraPageState extends State<CameraPage> {
                                 }
                               },
                             )
-                          : Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: Image.file(_capturedImage!,
-                                    fit: BoxFit.cover),
-                              ),
-                            ),
+                          : Image.file(_capturedImage!),
                     ),
-                    if (_capturedImage != null)
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: ElevatedButton(
-                          onPressed: _submitPhoto,
-                          style: ElevatedButton.styleFrom(
-                            primary: Colors.green,
-                            padding: EdgeInsets.symmetric(vertical: 15),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          child: Text(
-                            'Submit Photo',
-                            style:
-                                TextStyle(fontSize: 18, color: Colors.white),
-                          ),
+                    const SizedBox(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        ElevatedButton.icon(
+                          icon: Icon(Icons.camera_alt),
+                          label: Text('Ambil Foto'),
+                          onPressed:
+                              _isCapturing ? null : () => _capturePhoto(),
                         ),
-                      ),
-                    Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: ElevatedButton(
-                        onPressed: _capturePhoto,
-                        style: ElevatedButton.styleFrom(
-                          primary: Colors.indigo[900],
-                          padding: EdgeInsets.symmetric(vertical: 15),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+                        if (_capturedImage != null)
+                          ElevatedButton.icon(
+                            icon: Icon(Icons.upload_file),
+                            label: Text('Kirim Foto'),
+                            onPressed: _isUploading ? null : _submitPhoto,
                           ),
-                        ),
-                        child: Text(
-                          'Capture Photo',
-                          style: TextStyle(fontSize: 18, color: Colors.white),
-                        ),
-                      ),
+                      ],
                     ),
+                    const SizedBox(height: 20),
                   ],
                 ),
     );
