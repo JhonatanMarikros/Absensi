@@ -206,10 +206,10 @@ class _UploadFilePageState extends State<UploadFilePage> {
   void _submitFile() async {
     await _getLocation();
 
-    // if (_distanceInMeters != null && _distanceInMeters! >= 10) {
-    //   _showDiluarRadiusDialog(); // tampilkan dialog larangan
-    //   return; // hentikan proses, tidak lanjut ambil foto
-    // }
+    if (_distanceInMeters != null && _distanceInMeters! >= 10) {
+      _showDiluarRadiusDialog(); // tampilkan dialog larangan
+      return; // hentikan proses, tidak lanjut ambil foto
+    }
 
     if (_selectedFile != null) {
       setState(() {
@@ -313,7 +313,7 @@ class _UploadFilePageState extends State<UploadFilePage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
                 content:
-                    Text('File berhasil diunggah dan disimpan ke database!')),
+                    Text('Photo uploaded successfully!')),
           );
           Navigator.pop(context);
         } else {

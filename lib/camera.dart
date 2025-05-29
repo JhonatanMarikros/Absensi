@@ -177,10 +177,10 @@ class _CameraPageState extends State<CameraPage> {
     try {
       await _getLocation();
 
-      // if (_distanceInMeters != null && _distanceInMeters! >= 10) {
-      //   _showDiluarRadiusDialog(); // tampilkan dialog larangan
-      //   return; // hentikan proses, tidak lanjut ambil foto
-      // }
+      if (_distanceInMeters != null && _distanceInMeters! >= 10) {
+        _showDiluarRadiusDialog(); // tampilkan dialog larangan
+        return; // hentikan proses, tidak lanjut ambil foto
+      }
 
       setState(() => _isCapturing = true);
 
