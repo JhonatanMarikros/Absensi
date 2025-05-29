@@ -614,7 +614,7 @@ class _ListFotoPageState extends State<ListFotoPage> {
                       Text('Date: $formattedTimestamp',
                           style: const TextStyle(color: Colors.grey)),
                       const SizedBox(height: 4),
-                      Text("Location:, $address",
+                      Text("Location: $address",
                           style: const TextStyle(
                               fontWeight: FontWeight.w500,
                               color: Colors.black54)),

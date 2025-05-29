@@ -364,6 +364,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
         'Status',
         'CheckIn/Out',
         'Timestamp',
+        'Address',
+        'Radius',
       ]);
 
       // Ambil semua data user
@@ -403,6 +405,10 @@ class _AdminHomePageState extends State<AdminHomePage> {
           List<dynamic> imageUrls = data['imageUrls'];
 
           for (var img in imageUrls) {
+            var location = img['location'] ?? {};
+            String address = location['address'] ?? '';
+            String radius = location['radius'] ?? '';
+
             sheetObject.appendRow([
               isFirst ? username : '',
               isFirst ? hadir : '',
@@ -414,6 +420,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
               img['timestamp'] != null
                   ? (img['timestamp'] as Timestamp).toDate().toString()
                   : '',
+              address,
+              radius,
             ]);
             isFirst = false;
           }
@@ -773,7 +781,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                           ElevatedButton.icon(
                             onPressed: () => _exportPhotosToExcel(context),
                             icon: const Icon(Icons.download),
-                            label: const Text("Export Rekap ke Excel"),
+                            label: const Text("Export Rekap Absensi ke Excel"),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.teal,
                               padding: const EdgeInsets.symmetric(vertical: 14),
