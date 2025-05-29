@@ -116,7 +116,7 @@ class _ListFotoPageState extends State<ListFotoPage> {
               (outs.first['timestamp'] as Timestamp).toDate().toLocal();
           var diff = outTime.difference(inTime);
 
-          // Validasi 12 jam kerja dan checkout >= jam 20
+          // Validasi checkout >= jam 20
           if (outTime.hour >= 20) {
             // Lewat jam 11:00 tidak dihitung hadir
             if (inTime.isAfter(
@@ -277,7 +277,7 @@ class _ListFotoPageState extends State<ListFotoPage> {
     }
   }
 
-   Future<void> _undoApproval(String uid, ImageData image) async {
+  Future<void> _undoApproval(String uid, ImageData image) async {
     try {
       DocumentReference docRef = _firestore.collection('photos').doc(uid);
       DocumentSnapshot snapshot = await docRef.get();
@@ -529,6 +529,11 @@ class _ListFotoPageState extends State<ListFotoPage> {
                   ? "${timestamp.day}/${timestamp.month}/${timestamp.year} ${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}"
                   : "Timestamp unavailable";
 
+              // Ambil data location
+              final location = image['location'] ?? {};
+              final address = location['address'] ?? 'Tidak tersedia';
+              final radius = location['radius'] ?? 'Tidak diketahui';
+
               return Card(
                 margin: const EdgeInsets.all(12),
                 elevation: 3,
@@ -606,8 +611,18 @@ class _ListFotoPageState extends State<ListFotoPage> {
                               fontWeight: FontWeight.w500,
                               color: Colors.black54)),
                       const SizedBox(height: 4),
-                      Text('Waktu: $formattedTimestamp',
+                      Text('Date: $formattedTimestamp',
                           style: const TextStyle(color: Colors.grey)),
+                      const SizedBox(height: 4),
+                      Text("Location:, $address",
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w500,
+                              color: Colors.black54)),
+                      const SizedBox(height: 4),
+                      Text("Radius: $radius",
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w500,
+                              color: Colors.black54)),
                       const SizedBox(height: 8),
 
                       /// Tombol aksi

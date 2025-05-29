@@ -6,6 +6,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:ntp/ntp.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 
 class UploadFilePage extends StatefulWidget {
   final String statusCheckInCheckOut;
@@ -19,6 +21,14 @@ class UploadFilePage extends StatefulWidget {
 class _UploadFilePageState extends State<UploadFilePage> {
   File? _selectedFile;
   bool _isSubmitting = false;
+
+  Position? _currentPosition;
+  String? _currentAddress;
+
+  final double targetLatitude = -6.1659966;
+  final double targetLongitude = 106.6149330;
+
+  double? _distanceInMeters;
 
   final String cloudinaryUrl =
       "https://api.cloudinary.com/v1_1/dxmczui47/image/upload";
@@ -78,6 +88,104 @@ class _UploadFilePageState extends State<UploadFilePage> {
     );
   }
 
+  Future<void> _getLocation() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      print('Layanan lokasi tidak aktif');
+      await Geolocator.openLocationSettings();
+      return;
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        print('Izin lokasi ditolak');
+        return;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      print('Izin lokasi ditolak permanen');
+      return;
+    }
+
+    try {
+      _currentPosition = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high);
+      print('Lokasi berhasil: $_currentPosition');
+
+      // Hitung jarak dari lokasi tetap
+      await _calculateDistance();
+
+      // Dapatkan alamat lengkap dari lat,long
+      _currentAddress = await getAddressFromLatLng(
+          _currentPosition!.latitude, _currentPosition!.longitude);
+      print('Alamat lengkap: $_currentAddress');
+    } catch (e) {
+      print('Gagal mendapatkan lokasi atau alamat: $e');
+    }
+  }
+
+  Future<String> getAddressFromLatLng(double latitude, double longitude) async {
+    try {
+      List<Placemark> placemarks =
+          await placemarkFromCoordinates(latitude, longitude);
+
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+
+        String jalan = (place.street != null && place.street!.isNotEmpty)
+            ? place.street!
+            : '';
+        String rtRw =
+            (place.subThoroughfare != null && place.subThoroughfare!.isNotEmpty)
+                ? place.subThoroughfare!
+                : '';
+        String kelurahan = place.subLocality ?? '';
+        String kecamatan = place.locality ?? '';
+        String kota = place.subAdministrativeArea ?? '';
+        String provinsi = place.administrativeArea ?? '';
+        String negara = place.country ?? '';
+        String kodePos = place.postalCode ?? '';
+
+        // Gabungkan alamat
+        String fullAddress = [
+          jalan,
+          rtRw,
+          kelurahan,
+          kecamatan,
+          kota,
+          provinsi,
+          kodePos,
+          negara
+        ].where((element) => element.isNotEmpty).join(', ');
+
+        return fullAddress;
+      } else {
+        return "Alamat tidak ditemukan";
+      }
+    } catch (e) {
+      print('Error pada geocoding: $e');
+      return "Error mendapatkan alamat";
+    }
+  }
+
+  Future<void> _calculateDistance() async {
+    if (_currentPosition != null) {
+      _distanceInMeters = Geolocator.distanceBetween(
+        _currentPosition!.latitude,
+        _currentPosition!.longitude,
+        targetLatitude,
+        targetLongitude,
+      );
+      print('Jarak dari lokasi tetap: $_distanceInMeters meter');
+    }
+  }
+
   Future<String?> _uploadToCloudinary(File file) async {
     try {
       var request = http.MultipartRequest('POST', Uri.parse(cloudinaryUrl));
@@ -96,6 +204,13 @@ class _UploadFilePageState extends State<UploadFilePage> {
   }
 
   void _submitFile() async {
+    await _getLocation();
+
+    if (_distanceInMeters != null && _distanceInMeters! >= 10) {
+      _showDiluarRadiusDialog(); // tampilkan dialog larangan
+      return; // hentikan proses, tidak lanjut ambil foto
+    }
+
     if (_selectedFile != null) {
       setState(() {
         _isSubmitting = true;
@@ -107,6 +222,16 @@ class _UploadFilePageState extends State<UploadFilePage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Anda harus login terlebih dahulu!')),
           );
+          return;
+        }
+
+        if (_currentPosition == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text(
+                    'Gagal mendapatkan lokasi. Pastikan lokasi aktif dan diizinkan.')),
+          );
+          setState(() => _isSubmitting = false);
           return;
         }
 
@@ -163,6 +288,14 @@ class _UploadFilePageState extends State<UploadFilePage> {
             'status': 'pending',
             'timestamp': Timestamp.fromDate(ntpTime),
             'statusCheckInCheckOut': widget.statusCheckInCheckOut,
+            'location': {
+              'latitude': _currentPosition!.latitude,
+              'longitude': _currentPosition!.longitude,
+              'address': _currentAddress ?? 'Alamat tidak tersedia',
+              'radius': _distanceInMeters != null
+                  ? _distanceInMeters!.toStringAsFixed(2) + ' meter'
+                  : 'Tidak diketahui',
+            },
           };
 
           if (snapshot.exists) {
@@ -221,7 +354,29 @@ class _UploadFilePageState extends State<UploadFilePage> {
     );
   }
 
-@override
+  void _showDiluarRadiusDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text("Absensi Ditolak"),
+          content: Text(
+            "Radius Anda di luar 10 meter dari kantor sehingga tidak bisa melakukan absensi.\n\n"
+            "Jarak Anda saat ini: ${_distanceInMeters?.toStringAsFixed(2)} meter\n"
+            "Alamat: ${_currentAddress ?? 'Tidak ditemukan'}",
+          ),
+          actions: [
+            TextButton(
+              child: Text("OK"),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[900],
@@ -251,11 +406,13 @@ class _UploadFilePageState extends State<UploadFilePage> {
                   ),
                   SizedBox(height: 24),
                   ElevatedButton(
-                    onPressed:
-                        _isSubmitting ? null : () => _showFilePickerOptions(context),
+                    onPressed: _isSubmitting
+                        ? null
+                        : () => _showFilePickerOptions(context),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.indigo[900],
-                      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 15),
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 24, vertical: 15),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),

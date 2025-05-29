@@ -27,7 +27,12 @@ class _CameraPageState extends State<CameraPage> {
   bool _isUploading = false;
   bool _isCapturing = false;
   Position? _currentPosition;
-  String? _currentAddress; // untuk simpan alamat hasil geocoding
+  String? _currentAddress;
+
+  final double targetLatitude = -6.1659966;
+  final double targetLongitude = 106.6149330;
+
+  double? _distanceInMeters;
 
   final String cloudinaryUrl =
       "https://api.cloudinary.com/v1_1/dxmczui47/image/upload";
@@ -100,28 +105,53 @@ class _CameraPageState extends State<CameraPage> {
           desiredAccuracy: LocationAccuracy.high);
       print('Lokasi berhasil: $_currentPosition');
 
+      // Hitung jarak dari lokasi tetap
+      await _calculateDistance();
+
       // Dapatkan alamat lengkap dari lat,long
       _currentAddress = await getAddressFromLatLng(
           _currentPosition!.latitude, _currentPosition!.longitude);
       print('Alamat lengkap: $_currentAddress');
-
     } catch (e) {
       print('Gagal mendapatkan lokasi atau alamat: $e');
     }
   }
 
-  // Fungsi reverse geocoding
   Future<String> getAddressFromLatLng(double latitude, double longitude) async {
     try {
       List<Placemark> placemarks =
           await placemarkFromCoordinates(latitude, longitude);
 
       if (placemarks.isNotEmpty) {
-        Placemark place = placemarks.first;
-        // Format alamat lengkap (bisa disesuaikan)
-        String alamat =
-            '${place.street}, ${place.subLocality}, ${place.locality}, ${place.administrativeArea}, ${place.country}';
-        return alamat;
+        final place = placemarks.first;
+
+        String jalan = (place.street != null && place.street!.isNotEmpty)
+            ? place.street!
+            : '';
+        String rtRw =
+            (place.subThoroughfare != null && place.subThoroughfare!.isNotEmpty)
+                ? place.subThoroughfare!
+                : '';
+        String kelurahan = place.subLocality ?? '';
+        String kecamatan = place.locality ?? '';
+        String kota = place.subAdministrativeArea ?? '';
+        String provinsi = place.administrativeArea ?? '';
+        String negara = place.country ?? '';
+        String kodePos = place.postalCode ?? '';
+
+        // Gabungkan alamat
+        String fullAddress = [
+          jalan,
+          rtRw,
+          kelurahan,
+          kecamatan,
+          kota,
+          provinsi,
+          kodePos,
+          negara
+        ].where((element) => element.isNotEmpty).join(', ');
+
+        return fullAddress;
       } else {
         return "Alamat tidak ditemukan";
       }
@@ -131,9 +161,27 @@ class _CameraPageState extends State<CameraPage> {
     }
   }
 
+  Future<void> _calculateDistance() async {
+    if (_currentPosition != null) {
+      _distanceInMeters = Geolocator.distanceBetween(
+        _currentPosition!.latitude,
+        _currentPosition!.longitude,
+        targetLatitude,
+        targetLongitude,
+      );
+      print('Jarak dari lokasi tetap: $_distanceInMeters meter');
+    }
+  }
+
   Future<void> _capturePhoto() async {
     try {
-      await _getLocation(); // Pastikan dapat lokasi dan alamat dulu
+      await _getLocation();
+
+      if (_distanceInMeters != null && _distanceInMeters! >= 10) {
+        _showDiluarRadiusDialog(); // tampilkan dialog larangan
+        return; // hentikan proses, tidak lanjut ambil foto
+      }
+
       setState(() => _isCapturing = true);
 
       await _initializeControllerFuture;
@@ -223,10 +271,13 @@ class _CameraPageState extends State<CameraPage> {
           'status': 'pending',
           'timestamp': Timestamp.fromDate(ntpTime),
           'statusCheckInCheckOut': widget.statusCheckInCheckOut,
-          'lokasi': {
+          'location': {
             'latitude': _currentPosition!.latitude,
             'longitude': _currentPosition!.longitude,
-            'alamat': _currentAddress ?? 'Alamat tidak tersedia',
+            'address': _currentAddress ?? 'Alamat tidak tersedia',
+            'radius': _distanceInMeters != null
+                ? _distanceInMeters!.toStringAsFixed(2) + ' meter'
+                : 'Tidak diketahui',
           },
         };
 
@@ -298,6 +349,28 @@ class _CameraPageState extends State<CameraPage> {
     );
   }
 
+  void _showDiluarRadiusDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text("Absensi Ditolak"),
+          content: Text(
+            "Radius Anda di luar 10 meter dari kantor sehingga tidak bisa melakukan absensi.\n\n"
+            "Jarak Anda saat ini: ${_distanceInMeters?.toStringAsFixed(2)} meter\n"
+            "Alamat: ${_currentAddress ?? 'Tidak ditemukan'}",
+          ),
+          actions: [
+            TextButton(
+              child: Text("OK"),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -352,10 +425,9 @@ class _CameraPageState extends State<CameraPage> {
                   ),
                 )
               : Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Expanded(
-                      child: (_capturedImage == null)
+                      child: _capturedImage == null
                           ? FutureBuilder<void>(
                               future: _initializeControllerFuture,
                               builder: (context, snapshot) {
@@ -368,27 +440,50 @@ class _CameraPageState extends State<CameraPage> {
                                 }
                               },
                             )
-                          : Image.file(_capturedImage!),
+                          : Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.file(_capturedImage!,
+                                    fit: BoxFit.cover),
+                              ),
+                            ),
                     ),
-                    const SizedBox(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        ElevatedButton.icon(
-                          icon: Icon(Icons.camera_alt),
-                          label: Text('Ambil Foto'),
-                          onPressed:
-                              _isCapturing ? null : () => _capturePhoto(),
-                        ),
-                        if (_capturedImage != null)
-                          ElevatedButton.icon(
-                            icon: Icon(Icons.upload_file),
-                            label: Text('Kirim Foto'),
-                            onPressed: _isUploading ? null : _submitPhoto,
+                    if (_capturedImage != null)
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: ElevatedButton(
+                          onPressed: _submitPhoto,
+                          style: ElevatedButton.styleFrom(
+                            primary: Colors.green,
+                            padding: EdgeInsets.symmetric(vertical: 15),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
-                      ],
+                          child: Text(
+                            'Submit Photo',
+                            style: TextStyle(fontSize: 18, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: ElevatedButton(
+                        onPressed: _capturePhoto,
+                        style: ElevatedButton.styleFrom(
+                          primary: Colors.indigo[900],
+                          padding: EdgeInsets.symmetric(vertical: 15),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: Text(
+                          'Capture Photo',
+                          style: TextStyle(fontSize: 18, color: Colors.white),
+                        ),
+                      ),
                     ),
-                    const SizedBox(height: 20),
                   ],
                 ),
     );
