@@ -92,6 +92,7 @@ flutter:
     - assets/SBM.png
     - assets/profile.png
     - assets/SBMOLD.png
+    - .env
 
 
 

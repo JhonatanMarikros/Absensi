@@ -59,7 +59,7 @@ class _HomeMainState extends State<HomeMain> {
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
         elevation: 0,
-        backgroundColor:Colors.indigo[900],
+        backgroundColor: Colors.indigo[900],
         title: Row(
           children: [
             Icon(Icons.home, color: Colors.white),
@@ -75,47 +75,50 @@ class _HomeMainState extends State<HomeMain> {
           ],
         ),
       ),
-      body: ListView(
-        children: [
-          SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              "Selamat datang, $username",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-          ),
-          SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(position,
-                style: TextStyle(fontSize: 16, color: Colors.grey[700])),
-          ),
-          SizedBox(height: 16),
-
-          // Tambahkan tombol untuk membuka halaman Slip Gaji User
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => SalaryUserPage(
-                        uid: FirebaseAuth.instance.currentUser!.uid),
-                  ),
-                );
-              },
-              child:
-                  Text("Lihat Slip Gaji", style: TextStyle(fontSize: 16)),
-              style: ElevatedButton.styleFrom(
-                primary: Colors.indigo[900],
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), // Warna tombol
-                padding: EdgeInsets.symmetric(vertical: 12),
+      body: SafeArea(
+        child: ListView(
+          children: [
+            SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                "Selamat datang, $username",
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
             ),
-          ),
-        ],
+            SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                position,
+                style: TextStyle(fontSize: 16, color: Colors.grey[700]),
+              ),
+            ),
+            SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => SalaryUserPage(
+                          uid: FirebaseAuth.instance.currentUser!.uid),
+                    ),
+                  );
+                },
+                child: Text("Lihat Slip Gaji", style: TextStyle(fontSize: 16)),
+                style: ElevatedButton.styleFrom(
+                  primary: Colors.indigo[900],
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

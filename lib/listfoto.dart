@@ -1,6 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'salary.dart';
+import 'package:crypto/crypto.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 typedef ImageData = Map<String, dynamic>;
 
@@ -192,7 +196,7 @@ class _ListFotoPageState extends State<ListFotoPage> {
     }
   }
 
-  Future<void> _deletePhoto(String uid, ImageData image) async {
+  Future<void> _deletePhoto(String uid, Map<String, dynamic> image) async {
     try {
       DocumentReference docRef = _firestore.collection('photos').doc(uid);
       DocumentSnapshot snapshot = await docRef.get();
@@ -200,9 +204,17 @@ class _ListFotoPageState extends State<ListFotoPage> {
       if (!snapshot.exists) return;
 
       List<dynamic> imageUrls = List.from(snapshot['imageUrls'] ?? []);
+
+      // Hapus dari list berdasarkan imageUrl
       imageUrls.removeWhere((img) => img['imageUrl'] == image['imageUrl']);
 
+      // Hapus dari Firestore
       await docRef.update({'imageUrls': imageUrls});
+
+      // Hapus dari Cloudinary jika ada public_id
+      if (image.containsKey('public_id')) {
+        await deleteImageFromCloudinary(image['public_id']);
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Foto berhasil dihapus")),
@@ -211,6 +223,36 @@ class _ListFotoPageState extends State<ListFotoPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error saat menghapus: ${e.toString()}")),
       );
+    }
+  }
+
+  Future<void> deleteImageFromCloudinary(String publicId) async {
+    final cloudName = dotenv.env['CLOUDINARY_CLOUD_NAME']!;
+    final apiKey = dotenv.env['CLOUDINARY_API_KEY']!;
+    final apiSecret = dotenv.env['CLOUDINARY_API_SECRET']!;
+
+    final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final signatureString =
+        'public_id=$publicId&timestamp=$timestamp$apiSecret';
+    final signature = sha1.convert(utf8.encode(signatureString)).toString();
+
+    final uri =
+        Uri.parse('https://api.cloudinary.com/v1_1/$cloudName/image/destroy');
+
+    final response = await http.post(
+      uri,
+      body: {
+        'public_id': publicId,
+        'api_key': apiKey,
+        'timestamp': timestamp.toString(),
+        'signature': signature,
+      },
+    );
+
+    if (response.statusCode == 200) {
+      print('✅ Gambar berhasil dihapus dari Cloudinary');
+    } else {
+      print('❌ Gagal menghapus gambar dari Cloudinary: ${response.body}');
     }
   }
 

@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
-
+import 'main.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
@@ -26,9 +28,8 @@ class _MePageState extends State<MePage> {
 
   File? _selectedImage;
 
-  // Cloudinary config
-  final String cloudinaryUrl =
-      "https://api.cloudinary.com/v1_1/dxmczui47/image/upload";
+ final String cloudinaryUrl =
+    "https://api.cloudinary.com/v1_1/${dotenv.env['CLOUDINARY_CLOUD_NAME']}/image/upload";
   final String uploadPreset = "absensi";
 
   @override
@@ -77,22 +78,65 @@ class _MePageState extends State<MePage> {
     return croppedFile != null ? File(croppedFile.path) : null;
   }
 
+  Future<void> _deleteFromCloudinary(String publicId) async {
+    final cloudName = dotenv.env['CLOUDINARY_CLOUD_NAME']!;
+    final apiKey = dotenv.env['CLOUDINARY_API_KEY']!;
+    final apiSecret = dotenv.env['CLOUDINARY_API_SECRET']!;
+
+    final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final signatureBase = "public_id=$publicId&timestamp=$timestamp$apiSecret";
+    final signature = sha1.convert(utf8.encode(signatureBase)).toString();
+
+    final url = "https://api.cloudinary.com/v1_1/$cloudName/image/destroy";
+
+    final response = await http.post(
+      Uri.parse(url),
+      body: {
+        "public_id": publicId,
+        "api_key": apiKey,
+        "timestamp": "$timestamp",
+        "signature": signature,
+      },
+    );
+
+    if (response.statusCode != 200) {
+      print("Cloudinary deletion failed: ${response.body}");
+    }
+  }
+
   Future<void> _uploadToCloudinary() async {
     if (_selectedImage == null) return;
 
     _showLoadingDialog();
 
     try {
+      // Ambil public_id lama jika ada
+      final userDoc = await _firestore.collection('users').doc(uid).get();
+      final oldPublicId = userDoc.data()?['public_id'];
+
+      // Upload baru
       final request = http.MultipartRequest('POST', Uri.parse(cloudinaryUrl))
         ..fields['upload_preset'] = uploadPreset
-        ..files.add(await http.MultipartFile.fromPath('file', _selectedImage!.path));
+        ..files.add(
+            await http.MultipartFile.fromPath('file', _selectedImage!.path));
 
       final response = await request.send();
       final jsonResponse = json.decode(await response.stream.bytesToString());
       final url = jsonResponse['secure_url'];
+      final publicId = jsonResponse['public_id'];
 
-      if (url != null) {
-        await _firestore.collection('users').doc(uid).update({'profile': url});
+      if (url != null && publicId != null) {
+        // Hapus gambar lama jika ada
+        if (oldPublicId != null && oldPublicId.isNotEmpty) {
+          await _deleteFromCloudinary(oldPublicId);
+        }
+
+        // Simpan ke Firestore
+        await _firestore.collection('users').doc(uid).update({
+          'profile': url,
+          'public_id': publicId,
+        });
+
         setState(() {
           profileImage = url;
           _selectedImage = null;
@@ -199,7 +243,8 @@ class _MePageState extends State<MePage> {
           Text(label, style: TextStyle(fontWeight: FontWeight.bold)),
           SizedBox(height: 6),
           Text(value,
-              style: TextStyle(fontSize: 18, color: color, fontWeight: FontWeight.bold)),
+              style: TextStyle(
+                  fontSize: 18, color: color, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -254,12 +299,20 @@ class _MePageState extends State<MePage> {
           ),
           SizedBox(height: 12),
           ElevatedButton(
-            onPressed: isEditing ? _updateUsername : () => setState(() => isEditing = true),
+            onPressed: isEditing
+                ? _updateUsername
+                : () => setState(() => isEditing = true),
             child: Text(isEditing ? "Save" : "Edit Username"),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo[900]),
+            style:
+                ElevatedButton.styleFrom(backgroundColor: Colors.indigo[900]),
           ),
           SizedBox(height: 24),
-          Text("Statistik", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Center(
+            child: Text(
+              "Statistik",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ),
           SizedBox(height: 8),
           if (uid.isNotEmpty)
             StreamBuilder<DocumentSnapshot>(
@@ -269,20 +322,29 @@ class _MePageState extends State<MePage> {
                   return Text("Data tidak tersedia");
                 }
                 final data = snapshot.data!.data() as Map<String, dynamic>?;
-                final stats = data?['statistics'] as Map<String, dynamic>? ?? {};
+                final stats =
+                    data?['statistics'] as Map<String, dynamic>? ?? {};
 
                 return Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _buildAttendanceBox("Hadir", "${stats['hadir'] ?? 0}", Colors.green),
-                    _buildAttendanceBox("Telat", "${stats['totalTelat'] ?? 0}", Colors.red),
-                    _buildAttendanceBox("Waktu", "${stats['waktuTelat'] ?? 0} mnt", Colors.orange),
+                    _buildAttendanceBox(
+                        "Hadir", "${stats['hadir'] ?? 0}", Colors.green),
+                    _buildAttendanceBox(
+                        "Telat", "${stats['totalTelat'] ?? 0}", Colors.red),
+                    _buildAttendanceBox("Waktu",
+                        "${stats['waktuTelat'] ?? 0} mnt", Colors.orange),
                   ],
                 );
               },
             ),
           SizedBox(height: 24),
-          Text("Riwayat Foto", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Center(
+            child: Text(
+              "Riwayat Foto",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ),
           if (uid.isNotEmpty)
             StreamBuilder<DocumentSnapshot>(
               stream: _firestore.collection('photos').doc(uid).snapshots(),
@@ -292,7 +354,8 @@ class _MePageState extends State<MePage> {
                 }
 
                 final data = snapshot.data!.data() as Map<String, dynamic>?;
-                final imageUrls = List<Map<String, dynamic>>.from(data?['imageUrls'] ?? []);
+                final imageUrls =
+                    List<Map<String, dynamic>>.from(data?['imageUrls'] ?? []);
 
                 return Column(
                   children: imageUrls.map((image) {
@@ -316,12 +379,14 @@ class _MePageState extends State<MePage> {
                               onTap: () => _showImagePopup(image['imageUrl']),
                               child: AspectRatio(
                                 aspectRatio: 4 / 3,
-                                child: Image.network(image['imageUrl'], fit: BoxFit.cover),
+                                child: Image.network(image['imageUrl'],
+                                    fit: BoxFit.cover),
                               ),
                             ),
                             SizedBox(height: 8),
                             Text("Status: ${image['status']}"),
-                            Text("Check: ${image['statusCheckInCheckOut'] ?? 'Tidak diketahui'}"),
+                            Text(
+                                "Check: ${image['statusCheckInCheckOut'] ?? 'Tidak diketahui'}"),
                             Text("Waktu: $formatted"),
                             Text("Lokasi: $address"),
                             Text("Radius: $radius"),

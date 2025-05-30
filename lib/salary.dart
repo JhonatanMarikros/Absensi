@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ntp/ntp.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class SalaryPage extends StatefulWidget {
   final String uid;
@@ -19,6 +20,7 @@ class SalaryPage extends StatefulWidget {
 class _SalaryPageState extends State<SalaryPage> {
   bool isUploading = false;
 
+  // Fungsi mengupload gambar ke Cloudinary
   Future<void> uploadSlipGajiToCloudinary(String uid, String username) async {
     final result = await FilePicker.platform.pickFiles(
       allowMultiple: true,
@@ -43,9 +45,12 @@ class _SalaryPageState extends State<SalaryPage> {
         final filePath = file.path;
         if (filePath == null) continue;
 
-        final uri = Uri.parse('https://api.cloudinary.com/v1_1/dxmczui47/image/upload');
+        final uri = Uri.parse(
+          'https://api.cloudinary.com/v1_1/${dotenv.env['CLOUDINARY_CLOUD_NAME']}/image/upload',
+        );
+
         final request = http.MultipartRequest('POST', uri)
-          ..fields['upload_preset'] = 'salary'
+          ..fields['upload_preset'] = dotenv.env['UPLOAD_PRESET2'] ?? ''
           ..files.add(await http.MultipartFile.fromPath('file', filePath));
 
         final response = await request.send();
@@ -57,6 +62,7 @@ class _SalaryPageState extends State<SalaryPage> {
 
           salaryImages.add({
             'salary_images': imageUrl,
+            'public_id': responseJson['public_id'],
             'timestamp': Timestamp.fromDate(DateTime.now()),
           });
         } else {
@@ -73,7 +79,8 @@ class _SalaryPageState extends State<SalaryPage> {
         }, SetOptions(merge: true));
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Slip gaji berhasil diunggah untuk $username')),
+          SnackBar(
+              content: Text('Slip gaji berhasil diunggah untuk $username')),
         );
       }
     } catch (e) {
@@ -85,6 +92,33 @@ class _SalaryPageState extends State<SalaryPage> {
       setState(() {
         isUploading = false;
       });
+    }
+  }
+
+  // Fungsi menghapus gambar dari Cloudinary
+  Future<void> deleteImageFromCloudinary(String publicId) async {
+    final cloudName = dotenv.env['CLOUDINARY_CLOUD_NAME'];
+    final apiKey = dotenv.env['CLOUDINARY_API_KEY'];
+    final apiSecret = dotenv.env['CLOUDINARY_API_SECRET'];
+
+    final basicAuth =
+        'Basic ' + base64Encode(utf8.encode('$apiKey:$apiSecret'));
+
+    final url = Uri.parse(
+      'https://api.cloudinary.com/v1_1/$cloudName/resources/image/upload?public_ids[]=$publicId',
+    );
+
+    final response = await http.delete(
+      url,
+      headers: {
+        'Authorization': basicAuth,
+      },
+    );
+
+    if (response.statusCode == 200) {
+      print('✅ Gambar berhasil dihapus dari Cloudinary.');
+    } else {
+      print('❌ Gagal menghapus dari Cloudinary: ${response.body}');
     }
   }
 
@@ -145,7 +179,8 @@ class _SalaryPageState extends State<SalaryPage> {
                       }
 
                       if (!snapshot.hasData || !snapshot.data!.exists) {
-                        return const Center(child: Text('Belum ada slip gaji diunggah.'));
+                        return const Center(
+                            child: Text('Belum ada slip gaji diunggah.'));
                       }
 
                       final data = snapshot.data!;
@@ -154,7 +189,8 @@ class _SalaryPageState extends State<SalaryPage> {
                       );
 
                       if (salaryImagesData.isEmpty) {
-                        return const Center(child: Text('Tidak ada gambar yang diunggah.'));
+                        return const Center(
+                            child: Text('Tidak ada gambar yang diunggah.'));
                       }
 
                       return SingleChildScrollView(
@@ -192,8 +228,9 @@ class _SalaryPageState extends State<SalaryPage> {
                                       child: AspectRatio(
                                         aspectRatio: 4 / 3,
                                         child: ClipRRect(
-                                          borderRadius: const BorderRadius.vertical(
-                                              top: Radius.circular(12)),
+                                          borderRadius:
+                                              const BorderRadius.vertical(
+                                                  top: Radius.circular(12)),
                                           child: Image.network(
                                             imageUrl,
                                             width: double.infinity,
@@ -204,7 +241,8 @@ class _SalaryPageState extends State<SalaryPage> {
                                     ),
                                     Padding(
                                       padding: const EdgeInsets.all(10.0),
-                                      child: Text('Diupload pada: $formattedTime'),
+                                      child:
+                                          Text('Diupload pada: $formattedTime'),
                                     ),
                                     Padding(
                                       padding: const EdgeInsets.only(
@@ -213,27 +251,42 @@ class _SalaryPageState extends State<SalaryPage> {
                                         alignment: Alignment.centerRight,
                                         child: ElevatedButton.icon(
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.red.shade600,
+                                            backgroundColor:
+                                                Colors.red.shade600,
                                             foregroundColor: Colors.white,
                                             padding: const EdgeInsets.symmetric(
                                                 horizontal: 16, vertical: 10),
                                             shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(8),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
                                             ),
                                           ),
                                           onPressed: () async {
+                                            final publicId =
+                                                imageData['public_id'];
+
                                             await FirebaseFirestore.instance
                                                 .collection('salary')
                                                 .doc(widget.uid)
                                                 .update({
                                               'salary_images':
-                                                  FieldValue.arrayRemove([imageData]),
+                                                  FieldValue.arrayRemove(
+                                                      [imageData]),
                                             });
 
-                                            ScaffoldMessenger.of(context).showSnackBar(
+                                            if (publicId != null &&
+                                                publicId
+                                                    .toString()
+                                                    .isNotEmpty) {
+                                              await deleteImageFromCloudinary(
+                                                  publicId);
+                                            }
+
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
                                               const SnackBar(
-                                                  content:
-                                                      Text('Gambar berhasil dihapus')),
+                                                  content: Text(
+                                                      'Gambar berhasil dihapus')),
                                             );
                                           },
                                           icon: const Icon(Icons.delete),

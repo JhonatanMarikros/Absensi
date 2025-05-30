@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:ntp/ntp.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class CameraPage extends StatefulWidget {
   final String statusCheckInCheckOut;
@@ -35,8 +36,9 @@ class _CameraPageState extends State<CameraPage> {
   double? _distanceInMeters;
 
   final String cloudinaryUrl =
-      "https://api.cloudinary.com/v1_1/dxmczui47/image/upload";
-  final String uploadPreset = "absensi";
+      "https://api.cloudinary.com/v1_1/${dotenv.env['CLOUDINARY_CLOUD_NAME']}/image/upload";
+  final String uploadPreset = dotenv.env['UPLOAD_PRESET1'] ?? '';
+
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -177,10 +179,10 @@ class _CameraPageState extends State<CameraPage> {
     try {
       await _getLocation();
 
-      if (_distanceInMeters != null && _distanceInMeters! >= 10) {
-        _showDiluarRadiusDialog(); // tampilkan dialog larangan
-        return; // hentikan proses, tidak lanjut ambil foto
-      }
+      // if (_distanceInMeters != null && _distanceInMeters! >= 10) {
+      //   _showDiluarRadiusDialog(); // tampilkan dialog larangan
+      //   return; // hentikan proses, tidak lanjut ambil foto
+      // }
 
       setState(() => _isCapturing = true);
 
@@ -263,11 +265,12 @@ class _CameraPageState extends State<CameraPage> {
         }
       }
 
-      String? imageUrl = await _uploadToCloudinary(_capturedImage!);
+      final uploadResult = await _uploadToCloudinary(_capturedImage!);
 
-      if (imageUrl != null) {
+      if (uploadResult != null) {
         Map<String, dynamic> newImage = {
-          'imageUrl': imageUrl,
+          'imageUrl': uploadResult['imageUrl'],
+          'public_id': uploadResult['public_id'], // <-- tambahkan ini
           'status': 'pending',
           'timestamp': Timestamp.fromDate(ntpTime),
           'statusCheckInCheckOut': widget.statusCheckInCheckOut,
@@ -312,7 +315,7 @@ class _CameraPageState extends State<CameraPage> {
     }
   }
 
-  Future<String?> _uploadToCloudinary(File imageFile) async {
+  Future<Map<String, dynamic>?> _uploadToCloudinary(File imageFile) async {
     try {
       var request = http.MultipartRequest('POST', Uri.parse(cloudinaryUrl));
       request.fields['upload_preset'] = uploadPreset;
@@ -323,7 +326,15 @@ class _CameraPageState extends State<CameraPage> {
       var responseData = await response.stream.bytesToString();
       var jsonData = json.decode(responseData);
 
-      return jsonData['secure_url'];
+      if (jsonData['secure_url'] != null && jsonData['public_id'] != null) {
+        return {
+          'imageUrl': jsonData['secure_url'],
+          'public_id': jsonData['public_id'],
+        };
+      } else {
+        print('Cloudinary upload response does not contain expected fields');
+        return null;
+      }
     } catch (e) {
       print('Error uploading to Cloudinary: $e');
       return null;

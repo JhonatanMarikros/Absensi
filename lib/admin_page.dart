@@ -45,7 +45,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
   @override
   void initState() {
     super.initState();
-    dotenv.load(fileName: ".env");
   }
 
   void _logout() async {

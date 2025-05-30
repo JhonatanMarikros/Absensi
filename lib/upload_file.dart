@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'package:ntp/ntp.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class UploadFilePage extends StatefulWidget {
   final String statusCheckInCheckOut;
@@ -31,8 +32,9 @@ class _UploadFilePageState extends State<UploadFilePage> {
   double? _distanceInMeters;
 
   final String cloudinaryUrl =
-      "https://api.cloudinary.com/v1_1/dxmczui47/image/upload";
-  final String uploadPreset = "absensi";
+      "https://api.cloudinary.com/v1_1/${dotenv.env['CLOUDINARY_CLOUD_NAME']}/image/upload";
+  final String uploadPreset = dotenv.env['UPLOAD_PRESET1'] ?? '';
+
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -186,7 +188,7 @@ class _UploadFilePageState extends State<UploadFilePage> {
     }
   }
 
-  Future<String?> _uploadToCloudinary(File file) async {
+  Future<Map<String, String>?> _uploadToCloudinary(File file) async {
     try {
       var request = http.MultipartRequest('POST', Uri.parse(cloudinaryUrl));
       request.fields['upload_preset'] = uploadPreset;
@@ -196,7 +198,11 @@ class _UploadFilePageState extends State<UploadFilePage> {
       var responseData = await response.stream.bytesToString();
       var jsonData = json.decode(responseData);
 
-      return jsonData['secure_url'];
+      // Ambil secure_url dan public_id
+      return {
+        'imageUrl': jsonData['secure_url'],
+        'public_id': jsonData['public_id']
+      };
     } catch (e) {
       print('Error uploading to Cloudinary: $e');
       return null;
@@ -206,10 +212,10 @@ class _UploadFilePageState extends State<UploadFilePage> {
   void _submitFile() async {
     await _getLocation();
 
-    if (_distanceInMeters != null && _distanceInMeters! >= 10) {
-      _showDiluarRadiusDialog(); // tampilkan dialog larangan
-      return; // hentikan proses, tidak lanjut ambil foto
-    }
+    // if (_distanceInMeters != null && _distanceInMeters! >= 10) {
+    //   _showDiluarRadiusDialog(); // tampilkan dialog larangan
+    //   return; // hentikan proses, tidak lanjut ambil foto
+    // }
 
     if (_selectedFile != null) {
       setState(() {
@@ -279,12 +285,13 @@ class _UploadFilePageState extends State<UploadFilePage> {
           }
         }
 
-        // Upload ke Cloudinary
-        String? imageUrl = await _uploadToCloudinary(_selectedFile!);
+        final cloudinaryResponse = await _uploadToCloudinary(_selectedFile!);
 
-        if (imageUrl != null) {
+        if (cloudinaryResponse != null) {
           Map<String, dynamic> newImage = {
-            'imageUrl': imageUrl,
+            'imageUrl': cloudinaryResponse['imageUrl'],
+            'public_id':
+                cloudinaryResponse['public_id'], // Tambahkan public_id di sini
             'status': 'pending',
             'timestamp': Timestamp.fromDate(ntpTime),
             'statusCheckInCheckOut': widget.statusCheckInCheckOut,
@@ -311,9 +318,7 @@ class _UploadFilePageState extends State<UploadFilePage> {
           }
 
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content:
-                    Text('Photo uploaded successfully!')),
+            SnackBar(content: Text('Photo uploaded successfully!')),
           );
           Navigator.pop(context);
         } else {
