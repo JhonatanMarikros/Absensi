@@ -212,10 +212,10 @@ class _UploadFilePageState extends State<UploadFilePage> {
   void _submitFile() async {
     await _getLocation();
 
-    // if (_distanceInMeters != null && _distanceInMeters! >= 10) {
-    //   _showDiluarRadiusDialog(); // tampilkan dialog larangan
-    //   return; // hentikan proses, tidak lanjut ambil foto
-    // }
+    if (_distanceInMeters != null && _distanceInMeters! >= 10) {
+      _showDiluarRadiusDialog(); // tampilkan dialog larangan
+      return; // hentikan proses, tidak lanjut ambil foto
+    }
 
     if (_selectedFile != null) {
       setState(() {

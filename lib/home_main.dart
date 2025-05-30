@@ -64,8 +64,16 @@ class _HomeMainState extends State<HomeMain> {
           children: [
             Icon(Icons.home, color: Colors.white),
             SizedBox(width: 8),
-            Text("Home - Sukses Bersama Mulia"),
-            Spacer(),
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  "Home - Sukses Bersama Mulia",
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ),
             CircleAvatar(
               backgroundImage: profileUrl.isNotEmpty
                   ? NetworkImage(profileUrl)

@@ -69,6 +69,15 @@ class _AdminHomePageState extends State<AdminHomePage> {
       return;
     }
 
+    // Tampilkan loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
     try {
       UserCredential userCredential = await _auth
           .createUserWithEmailAndPassword(email: email, password: password);
@@ -81,6 +90,9 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
       _emailController.clear();
       _passwordController.clear();
+
+      // Tutup loading dialog sebelum tampilkan sukses
+      Navigator.of(context).pop();
 
       showDialog(
         context: context,
@@ -140,6 +152,15 @@ class _AdminHomePageState extends State<AdminHomePage> {
       return;
     }
 
+    // Tampilkan loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
     try {
       // Inisialisasi Secondary App
       final FirebaseApp secondaryApp = await Firebase.initializeApp(
@@ -173,6 +194,9 @@ class _AdminHomePageState extends State<AdminHomePage> {
       _userPasswordController.clear();
       _usernameController.clear();
       _selectedPosition = null;
+
+      // Tutup loading dialog sebelum tampilkan sukses
+      Navigator.of(context).pop();
 
       // Notifikasi sukses
       showDialog(
@@ -213,33 +237,141 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   void _confirmDeleteUser(String userId) {
+    final outerContext = context; // simpan context utama halaman
+
     showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
+      context: outerContext,
+      builder: (dialogContext) => AlertDialog(
         title: Text("Konfirmasi Hapus"),
         content: Text("Yakin ingin menghapus user ini dari sistem?"),
         actions: [
           TextButton(
             child: Text("Batal"),
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
           ),
           TextButton(
             child: Text("Hapus", style: TextStyle(color: Colors.red)),
             onPressed: () async {
-              Navigator.of(context).pop();
+              Navigator.of(dialogContext).pop(); // tutup dialog konfirmasi
 
-              // Hapus dokumen dari 'users'
-              await _firestore.collection('users').doc(userId).delete();
-              await _firestore.collection('salary').doc(userId).delete();
-              await _firestore.collection('photos').doc(userId).delete();
+              // Tampilkan loading (pakai outerContext!)
+              showDialog(
+                context: outerContext,
+                barrierDismissible: false,
+                builder: (loadingContext) => Dialog(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(width: 20),
+                        Text("Menghapus..."),
+                      ],
+                    ),
+                  ),
+                ),
+              );
 
-              // Tampilkan informasi
-              _showInfoDelete();
+              // Jalankan proses hapus
+              await _deleteUserData(userId);
+
+              // Tutup loading (pakai outerContext!)
+              if (outerContext.mounted) {
+                Navigator.of(outerContext).pop();
+
+                // Tampilkan info selesai
+                _showInfoDelete();
+              }
             },
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _deleteUserData(String userId) async {
+    try {
+      // 1. Hapus gambar profil dari koleksi 'users'
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      if (userDoc.exists && userDoc.data()!.containsKey('public_id')) {
+        String publicId = userDoc['public_id'];
+        await _deleteImageFromCloudinary(publicId);
+      }
+
+      // 2. Hapus foto dari koleksi 'photos'
+      final photoDoc = await _firestore.collection('photos').doc(userId).get();
+      if (photoDoc.exists) {
+        final data = photoDoc.data();
+
+        // Case 1: jika struktur tunggal
+        if (data != null && data.containsKey('public_id')) {
+          String publicId = data['public_id'];
+          await _deleteImageFromCloudinary(publicId);
+        }
+
+        // Case: imageUrls adalah List of Map
+        if (data != null && data.containsKey('imageUrls')) {
+          final imageUrls = data['imageUrls'];
+          if (imageUrls is List) {
+            for (var photo in imageUrls) {
+              if (photo is Map && photo.containsKey('public_id')) {
+                String publicId = photo['public_id'];
+                await _deleteImageFromCloudinary(publicId);
+              }
+            }
+          }
+        }
+      }
+
+      // 3. Hapus slip gaji dari koleksi 'salary'
+      final salaryDoc = await _firestore.collection('salary').doc(userId).get();
+      if (salaryDoc.exists) {
+        if (salaryDoc.data()!['salary_images'] is List) {
+          for (var item in salaryDoc['salary_images']) {
+            if (item is Map && item['public_id'] != null) {
+              await _deleteImageFromCloudinary(item['public_id']);
+            }
+          }
+        }
+      }
+
+      // 4. Hapus dokumen Firestore
+      await _firestore.collection('users').doc(userId).delete();
+      await _firestore.collection('salary').doc(userId).delete();
+      await _firestore.collection('photos').doc(userId).delete();
+
+      print("User dan semua data terkait berhasil dihapus.");
+    } catch (e) {
+      print("Error saat menghapus data user: $e");
+    }
+  }
+
+  Future<void> _deleteImageFromCloudinary(String publicId) async {
+    final cloudName = dotenv.env['CLOUDINARY_CLOUD_NAME']!;
+    final apiKey = dotenv.env['CLOUDINARY_API_KEY']!;
+    final apiSecret = dotenv.env['CLOUDINARY_API_SECRET']!;
+
+    final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final signatureRaw = 'public_id=$publicId&timestamp=$timestamp$apiSecret';
+    final signature = sha1.convert(utf8.encode(signatureRaw)).toString();
+
+    final response = await http.post(
+      Uri.parse('https://api.cloudinary.com/v1_1/$cloudName/image/destroy'),
+      body: {
+        'public_id': publicId,
+        'api_key': apiKey,
+        'timestamp': timestamp.toString(),
+        'signature': signature,
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final responseBody = json.decode(response.body);
+      print("Cloudinary delete result: ${responseBody['result']}");
+    } else {
+      print("Gagal menghapus gambar dari Cloudinary: ${response.body}");
+    }
   }
 
   void _showInfoDelete() {
@@ -260,51 +392,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
         ],
       ),
     );
-  }
-
-  Future<void> _deleteFromCloudinary(String imageUrl) async {
-    try {
-      String? cloudName = dotenv.env['CLOUDINARY_CLOUD_NAME'];
-      String? apiKey = dotenv.env['CLOUDINARY_API_KEY'];
-      String? apiSecret = dotenv.env['CLOUDINARY_API_SECRET'];
-
-      if (cloudName == null || apiKey == null || apiSecret == null) {
-        print("Error: Cloudinary credentials are missing.");
-        return;
-      }
-
-      Uri uri = Uri.parse(imageUrl);
-      String fileName = uri.pathSegments.last.split('.').first;
-      String publicId = "absensi/$fileName";
-
-      String timestamp =
-          (DateTime.now().millisecondsSinceEpoch ~/ 1000).toString();
-      String stringToSign =
-          'public_id=$publicId&timestamp=$timestamp$apiSecret';
-      String signature = sha1.convert(utf8.encode(stringToSign)).toString();
-
-      String apiUrl =
-          'https://api.cloudinary.com/v1_1/$cloudName/image/destroy';
-
-      var response = await http.post(
-        Uri.parse(apiUrl),
-        body: {
-          'public_id': publicId,
-          'api_key': apiKey,
-          'timestamp': timestamp,
-          'signature': signature,
-          'invalidate': 'true',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        print("✅ Berhasil menghapus dari Cloudinary.");
-      } else {
-        print("⚠️ Gagal menghapus dari Cloudinary: ${response.body}");
-      }
-    } catch (e) {
-      print("❌ Error menghapus dari Cloudinary: $e");
-    }
   }
 
   String _formatTimestamp(dynamic timestamp) {
