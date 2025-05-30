@@ -19,14 +19,12 @@ class _MainPageState extends State<MainPage> {
   String username = "";
   String position = "";
   String profileUrl = "";
-  double logoSize = 150.0;
-  double logoTopPadding = 5.0;
-  double profileTopPadding = 100.0;
 
-  @override
-  void initState() {
-    super.initState();
-  }
+  final List<Widget> _pages = [
+    HomeMain(),
+    AbsensiPage(),
+    MePage(),
+  ];
 
   void _onItemTapped(int index) {
     setState(() {
@@ -42,33 +40,30 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  final List<Widget> _pages = [
-    HomeMain(),
-    AbsensiPage(),
-    MePage(),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final double screenHeight = MediaQuery.of(context).size.height;
+
     return Scaffold(
       resizeToAvoidBottomInset: false,
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(90.0),
+        preferredSize: Size.fromHeight(screenHeight * 0.13),
         child: AppBar(
-          backgroundColor: const Color.fromARGB(255, 0, 0, 0),
+          backgroundColor: Colors.black,
           flexibleSpace: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+            padding: EdgeInsets.symmetric(
+              horizontal: screenWidth * 0.04,
+              vertical: screenHeight * 0.015,
+            ),
             child: StreamBuilder<DocumentSnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('users')
                   .doc(widget.uid)
-                  .snapshots(), // Menggunakan stream untuk mendengarkan perubahan data user
+                  .snapshots(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
-                  return Center(
-                    child: CircularProgressIndicator(),
-                  );
+                  return Center(child: CircularProgressIndicator());
                 }
 
                 var userDoc = snapshot.data!;
@@ -78,25 +73,24 @@ class _MainPageState extends State<MainPage> {
 
                 return Stack(
                   children: [
-                    // Logo perusahaan di kiri atas
                     Align(
                       alignment: Alignment.topLeft,
                       child: Padding(
-                        padding: const EdgeInsets.only(top: 15.0),
+                        padding: EdgeInsets.only(top: screenHeight * 0.015),
                         child: Image.asset(
                           'assets/SBMOLD.png',
-                          height: 300,
+                          height: screenHeight * 0.18,
                         ),
                       ),
                     ),
                     Align(
                       alignment: Alignment.bottomCenter,
                       child: Padding(
-                        padding: const EdgeInsets.only(bottom: 25.0),
+                        padding: EdgeInsets.only(bottom: screenHeight * 0.02),
                         child: Text(
                           "$username - $position",
-                          style: const TextStyle(
-                            fontSize: 18,
+                          style: TextStyle(
+                            fontSize: screenWidth * 0.045,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
@@ -104,12 +98,10 @@ class _MainPageState extends State<MainPage> {
                         ),
                       ),
                     ),
-
-                    // Tombol logout di kanan bawah
                     Align(
                       alignment: Alignment.bottomRight,
                       child: Padding(
-                        padding: const EdgeInsets.only(bottom: 10.0),
+                        padding: EdgeInsets.only(bottom: screenHeight * 0.015),
                         child: IconButton(
                           icon: const Icon(Icons.logout,
                               color: Color.fromARGB(255, 159, 16, 16)),
@@ -124,18 +116,16 @@ class _MainPageState extends State<MainPage> {
           ),
         ),
       ),
-      // Body & BottomNavigationBar tetap
-      body: _pages[_selectedIndex],
+      body: SafeArea(child: _pages[_selectedIndex]),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.indigo[700],
         onPressed: () {
           setState(() {
-            _selectedIndex = 1; // pindah ke Absensi
+            _selectedIndex = 1;
           });
         },
-        child: Icon(Icons.check_circle,
-            size: 30), // Ganti dengan icon absensi/QRIS
+        child: Icon(Icons.calendar_today, size: screenWidth * 0.07),
       ),
       bottomNavigationBar: ClipRRect(
         borderRadius: const BorderRadius.only(
@@ -151,6 +141,7 @@ class _MainPageState extends State<MainPage> {
             children: [
               IconButton(
                 icon: Icon(Icons.home,
+                    size: screenWidth * 0.07,
                     color: _selectedIndex == 0 ? Colors.white : Colors.grey),
                 onPressed: () {
                   setState(() {
@@ -158,9 +149,10 @@ class _MainPageState extends State<MainPage> {
                   });
                 },
               ),
-              SizedBox(width: 40), // ruang untuk FAB
+              SizedBox(width: screenWidth * 0.1), // Space for FAB
               IconButton(
                 icon: Icon(Icons.person,
+                    size: screenWidth * 0.07,
                     color: _selectedIndex == 2 ? Colors.white : Colors.grey),
                 onPressed: () {
                   setState(() {
