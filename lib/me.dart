@@ -386,8 +386,8 @@ class _MePageState extends State<MePage> {
                             Text("Status: ${image['status']}"),
                             Text(
                                 "Check: ${image['statusCheckInCheckOut'] ?? 'Tidak diketahui'}"),
-                            Text("Waktu: $formatted"),
-                            Text("Lokasi: $address"),
+                            Text("Date: $formatted"),
+                            Text("Location: $address"),
                             Text("Radius: $radius"),
                           ],
                         ),
